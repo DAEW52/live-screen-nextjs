@@ -1,0 +1,32 @@
+{
+  "pending": [],
+  "approved": [
+    {
+      "id": "mfcnqdi99xacz9",
+      "socialType": "facebook",
+      "name": "manager",
+      "tableNumber": "123",
+      "message": "เทสสสสสสส",
+      "imageUrl": "/uploads/1757428800984-Screenshot_2024-10-19_173937.png",
+      "createdAt": 1757428800993
+    },
+    {
+      "id": "mfcngm1p0pb21u",
+      "socialType": "instagram",
+      "name": "admin",
+      "tableNumber": "123",
+      "message": "เทสสสสสสสสสสสส",
+      "imageUrl": "/uploads/1757428345500-Screenshot_2024-10-19_203716.png",
+      "createdAt": 1757428345501
+    },
+    {
+      "id": "mfcm0w9dccva55",
+      "socialType": "line",
+      "name": "admin",
+      "tableNumber": "123",
+      "message": "กฟหก",
+      "imageUrl": "/uploads/1757425932620-Screenshot_2024-10-03_202245.png",
+      "createdAt": 1757425932625
+    }
+  ]
+}

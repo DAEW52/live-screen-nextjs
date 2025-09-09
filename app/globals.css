@@ -1,0 +1,585 @@
+/* === CSS Reset & Base Styles === */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #c9d1d9;
+  line-height: 1.6;
+  
+  /* Modern Background (Aurora Effect) for all pages */
+  background-color: #0d1117;
+  background-image: 
+    radial-gradient(at 10% 20%, hsla(210, 80%, 30%, 0.2) 0px, transparent 40%),
+    radial-gradient(at 90% 80%, hsla(280, 70%, 30%, 0.2) 0px, transparent 40%),
+    radial-gradient(at 50% 50%, hsla(180, 60%, 25%, 0.15) 0px, transparent 50%);
+}
+
+
+/* === Home Page Form Styles (for Centering) === */
+body:has(.form-container) {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.form-container {
+  display: flex;
+  gap: 40px;
+  padding: 32px 40px;
+  background-color: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  max-width: 1000px;
+  width: 95%;
+  max-height: 95vh;
+  overflow-y: auto;
+}
+
+.form-column {
+  flex: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+.tips-column {
+  flex: 1;
+  border-left: 1px solid #30363d;
+  padding-left: 40px;
+}
+
+.form-title {
+  color: #58a6ff;
+  margin-bottom: 24px;
+  font-weight: 600;
+}
+
+.form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 500;
+  color: #8b949e;
+}
+
+input[type="text"],
+textarea,
+select {
+  width: 100%;
+  padding: 10px 14px;
+  background-color: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-size: 1rem;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="text"]:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.3);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.radio-group {
+  display: flex;
+  gap: 10px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  padding: 5px;
+  background-color: #0d1117;
+}
+
+.radio-group label {
+  flex: 1;
+  text-align: center;
+  padding: 8px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+  color: #8b949e;
+}
+
+.radio-group input[type="radio"] {
+  display: none;
+}
+
+.radio-group label.active {
+  background-color: #58a6ff;
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.upload-box {
+  border: 2px dashed #30363d;
+  border-radius: 6px;
+  padding: 30px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+  color: #8b949e;
+}
+
+.upload-box:hover {
+  border-color: #58a6ff;
+  background-color: #161b22;
+}
+
+.upload-box small {
+  display: block;
+  margin-top: 8px;
+  font-size: 0.8rem;
+}
+
+.tips-box {
+  position: sticky;
+  top: 0;
+}
+
+.tips-box h2 {
+  color: #f0f6fc;
+  border-bottom: 1px solid #30363d;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+}
+
+.tips-box h3 {
+  color: #8b949e;
+  margin-bottom: 12px;
+  font-size: 1.1rem;
+}
+
+.tips-box ul {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 24px;
+}
+
+.tips-box li {
+  padding-left: 20px;
+  position: relative;
+  margin-bottom: 10px;
+  color: #8b949e;
+}
+
+.tips-box li::before {
+  content: '•';
+  color: #58a6ff;
+  position: absolute;
+  left: 0;
+  font-weight: bold;
+}
+
+.button-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-submit, .btn-clear {
+  flex: 1;
+  padding: 12px;
+  border-radius: 6px;
+  border: none;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.btn-submit {
+  background-color: #238636;
+  color: white;
+}
+
+.btn-submit:hover {
+  background-color: #2ea043;
+}
+
+.btn-clear {
+  background-color: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+}
+
+.btn-clear:hover {
+  background-color: #30363d;
+  border-color: #8b949e;
+}
+
+
+/* === Modern Admin UI Upgrade === */
+
+.admin-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+  width: 100%;
+}
+
+.admin-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.admin-toolbar h1 {
+  background: -webkit-linear-gradient(45deg, #00c6ff, #0072ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 1.75rem;
+  font-weight: 700;
+}
+
+.admin-toolbar .controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-toolbar input[type="search"],
+.admin-toolbar select {
+  min-width: 180px;
+  padding: 10px 14px;
+  background-color: rgba(13, 17, 23, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  color: #c9d1d9;
+  font-size: 0.9rem;
+}
+
+.btn-refresh {
+  padding: 10px 16px;
+  background-color: rgba(33, 38, 45, 0.8);
+  color: #c9d1d9;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.btn-refresh:hover {
+  background-color: rgba(48, 54, 61, 0.8);
+}
+
+.admin-content .section {
+  margin-bottom: 40px;
+}
+
+.admin-content h2 {
+  font-size: 1.5rem;
+  color: #c9d1d9;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-weight: 600;
+}
+
+.grid-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.admin-card {
+  background: rgba(22, 27, 34, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.admin-card:hover {
+  transform: translateY(-8px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.admin-card .img-box {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+}
+
+.admin-card .img-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.4s ease;
+}
+
+.admin-card:hover .img-box img {
+  transform: scale(1.08);
+}
+
+.admin-card .meta {
+  padding: 16px;
+  flex-grow: 1;
+}
+
+.admin-card .msg {
+  font-style: italic;
+  color: #c9d1d9;
+  margin-bottom: 12px;
+  min-height: 40px;
+}
+
+.admin-card .badge {
+  display: inline-block;
+  background-color: rgba(48, 54, 61, 0.7);
+  color: #c9d1d9;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  margin-bottom: 8px;
+}
+
+.admin-card small {
+  color: #8b949e;
+  display: block;
+}
+
+.admin-card .actions {
+  padding: 0 16px 16px 16px;
+}
+
+.admin-card .actions button {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+}
+
+.btn-approve {
+  background-image: linear-gradient(45deg, #1D976C 0%, #93F9B9 100%);
+  box-shadow: 0 4px 15px rgba(29, 151, 108, 0.3);
+}
+
+.btn-approve:hover {
+  transform: scale(1.03);
+  box-shadow: 0 6px 20px rgba(29, 151, 108, 0.5);
+}
+
+.btn-delete {
+  background-image: linear-gradient(45deg, #cb2d3e 0%, #ef473a 100%);
+  box-shadow: 0 4px 15px rgba(203, 45, 62, 0.3);
+}
+
+.btn-delete:hover {
+  transform: scale(1.03);
+  box-shadow: 0 6px 20px rgba(203, 45, 62, 0.5);
+}
+
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 40px;
+  background: rgba(22, 27, 34, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px dashed rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  color: #8b949e;
+}
+
+/* === Modern Display Page UI Upgrade === */
+
+.stage {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: #0d1117;
+}
+
+.stage .bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  background-image: 
+    radial-gradient(at 80% 20%, hsla(210, 80%, 50%, 0.25) 0px, transparent 50%),
+    radial-gradient(at 20% 80%, hsla(280, 70%, 50%, 0.25) 0px, transparent 50%);
+}
+
+#idle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  z-index: 10;
+  position: relative;
+}
+
+#idle h1 {
+  font-size: 8vw;
+  font-weight: 800;
+  color: #c9d1d9;
+  text-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+#content {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+#content .imgwrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#content .imgwrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 15s linear, filter 1s ease-in-out;
+}
+
+/* === THE ONLY CHANGE IS HERE: Caption Position set to 75% === */
+#msg {
+  position: absolute;
+  width: 90%;
+  left: 50%;
+  top: 75%;  /* MOVED DOWN 20% MORE */
+  transform: translate(-50%, -50%);
+
+  z-index: 10;
+  font-size: clamp(2.5rem, 6vw, 5.5rem);
+  font-weight: 800;
+  color: #ffffff;
+  text-align: center;
+  padding: 0 5%;
+  text-shadow: 
+    0px 0px 10px rgba(0, 0, 0, 0.7),
+    0px 4px 15px rgba(0, 0, 0, 0.7),
+    0px 8px 25px rgba(0, 0, 0, 0.6);
+}
+
+/* Glassmorphism HUD */
+.hud {
+  position: absolute;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  padding: 12px 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+  transition: opacity 0.5s ease;
+}
+
+.hud #icon svg {
+  width: 48px;
+  height: 48px;
+}
+
+.hud p {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  color: #f0f6fc;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+/* Glassmorphism QR Code Box */
+#qrBox {
+  position: fixed !important;
+  bottom: 30px !important;
+  right: 30px !important;
+  z-index: 100;
+  background: rgba(255, 255, 255, 0.8) !important;
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  padding: 12px !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.37);
+}
+#qrBox p {
+  display: none; /* Hide the old text */
+}
+/* === Admin Card Buttons Update === */
+.admin-card .actions-group {
+  display: flex;
+  gap: 10px;
+  padding: 0 16px 16px 16px;
+}
+
+.admin-card .actions-group button {
+  flex: 1; /* Make buttons share space equally */
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: white;
+}
+
+.btn-reject {
+  background-image: linear-gradient(45deg, #8E2DE2 0%, #4A00E0 100%);
+  box-shadow: 0 4px 15px rgba(74, 0, 224, 0.3);
+}
+
+.btn-reject:hover {
+  transform: scale(1.03);
+  box-shadow: 0 6px 20px rgba(74, 0, 224, 0.5);
+}
