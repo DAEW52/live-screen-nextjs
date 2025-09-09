@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm:next-dev\" \"npm:socket-server\"",
+    "dev": "concurrently \"yarn next-dev\" \"yarn socket-server\"",
     "next-dev": "next dev",
     "socket-server": "node server.js",
     "build": "next build",
@@ -23,12 +23,16 @@
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "concurrently": "^8.2.2",
-    "eslint": "^8",
+    "eslint": "^8.57.1",
     "eslint-config-next": "14.2.4",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17"
   },
   "overrides": {
     "ansi-styles": "6.2.3"
+  },
+  "engines": {
+    "node": ">=16",
+    "yarn": ">=1.22"
   }
 }
