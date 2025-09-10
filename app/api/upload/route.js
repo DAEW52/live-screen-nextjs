@@ -1,47 +1,57 @@
 // app/api/upload/route.js
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient'; // Import ตัวเชื่อมต่อใหม่
+import { supabase } from '@/lib/supabaseClient';
 
 export async function POST(request) {
   try {
     const formData = await request.formData();
+
+    // DEBUG: log ทั้ง formData ออกมา
+    const entries = [...formData.entries()];
+    console.log("📦 formData entries:", entries);
+
     const file = formData.get('file');
 
-    if (!file) {
-      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
+    if (!file || typeof file === 'string') {
+      return NextResponse.json({ error: 'No file uploaded or file is invalid.' }, { status: 400 });
     }
 
-    // 1. อัปโหลดไฟล์ไปที่ Supabase Storage
     const fileName = `${Date.now()}-${file.name}`;
+
+    // อัปโหลดไปยัง Supabase
     const { data: fileData, error: fileError } = await supabase.storage
-      .from('uploads') // ชื่อ Bucket ที่เราสร้างไว้
-      .upload(fileName, file);
+      .from('uploads')
+      .upload(`public/${fileName}`, file, {
+        contentType: file.type,
+        upsert: false,
+      });
 
     if (fileError) {
+      console.error("❌ Upload error:", fileError);
       throw new Error(fileError.message);
     }
-    
-    // 2. ดึง Public URL ของไฟล์ที่เพิ่งอัปโหลด
+
+    // ดึง Public URL
     const { data: urlData } = supabase.storage
       .from('uploads')
-      .getPublicUrl(fileName);
+      .getPublicUrl(`public/${fileName}`);
 
-    // 3. เตรียมข้อมูลเพื่อบันทึกลงฐานข้อมูล
+    // เตรียมข้อมูลบันทึกลง DB
     const newSubmission = {
-      name: formData.get('name'),
-      socialType: formData.get('socialType'),
-      tableNumber: formData.get('tableNumber'),
-      message: formData.get('message'),
-      imageUrl: urlData.publicUrl, // ใช้ URL จาก Supabase
-      status: 'pending' // สถานะเริ่มต้น
+      name: formData.get('name') || '',
+      socialType: formData.get('socialType') || '',
+      tableNumber: formData.get('tableNumber') || '',
+      message: formData.get('message') || '',
+      imageUrl: urlData.publicUrl,
+      status: 'pending',
     };
 
-    // 4. เพิ่มข้อมูลลงในตาราง 'submissions'
     const { data: dbData, error: dbError } = await supabase
       .from('submissions')
       .insert([newSubmission]);
 
     if (dbError) {
+      console.error("❌ DB insert error:", dbError);
       throw new Error(dbError.message);
     }
 
