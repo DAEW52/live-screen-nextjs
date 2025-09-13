@@ -13,20 +13,18 @@ export async function POST(request) {
 
     const buffer = Buffer.from(await file.arrayBuffer());
 
-    // --- ✨ เปลี่ยนจากการบันทึกไฟล์ เป็นการแปลงไฟล์ในหน่วยความจำ ✨ ---
     const optimizedBuffer = await sharp(buffer)
       .resize(1920, 1080, { fit: 'inside', withoutEnlargement: true })
       .toFormat('webp')
       .webp({ quality: 80 })
-      .toBuffer(); // <--- จุดที่เปลี่ยนแปลง
+      .toBuffer();
 
     const fileName = `${Date.now()}-${file.name.split('.')[0]}.webp`;
 
-    // --- ✨ อัปโหลด Buffer ที่ประมวลผลแล้วไปยัง Supabase ✨ ---
     const { data: fileData, error: fileError } = await supabaseAdmin.storage
       .from('uploads')
-      .upload(fileName, optimizedBuffer, { // <--- ใช้ optimizedBuffer แทน file
-        contentType: 'image/webp', // ระบุประเภทไฟล์ใหม่
+      .upload(fileName, optimizedBuffer, {
+        contentType: 'image/webp',
         upsert: false,
       });
 
@@ -64,5 +62,5 @@ export async function POST(request) {
     console.error('Upload API Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-}
-`
+} // --- ✨ ปีกกาที่หายไปอยู่ตรงนี้ครับ ✨ ---
+
