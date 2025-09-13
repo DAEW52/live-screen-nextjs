@@ -6,20 +6,22 @@ import { supabase } from '@/lib/supabaseClient';
 export default function AdminPage() {
   const [pending, setPending] = useState([]);
   const [approved, setApproved] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchSubmissions = async () => {
+    setLoading(true);
     const { data, error } = await supabase
       .from('submissions')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (data) {
+    if (error) {
+      console.error('Error fetching submissions:', error);
+    } else {
       setPending(data.filter((item) => item.status === 'pending'));
       setApproved(data.filter((item) => item.status === 'approved'));
     }
-    if (error) {
-      console.error('❌ Fetch error:', error);
-    }
+    setLoading(false);
   };
 
   useEffect(() => {
@@ -31,24 +33,18 @@ export default function AdminPage() {
         'postgres_changes',
         { event: '*', schema: 'public', table: 'submissions' },
         (payload) => {
-          console.log('📩 Admin page received payload:', payload);
+          console.log('Change received!', payload);
           fetchSubmissions();
         }
       )
-      .subscribe();
-
-    // ✅ debug realtime status (แทน subscribe แบบเก่า)
-    channel.on('status', (status) => {
-      if (status === 'SUBSCRIBED') {
-        console.log('✅ [Admin Page] Connected to Realtime!');
-      }
-      if (status === 'CHANNEL_ERROR') {
-        console.error('❌ [Admin Page] Realtime Connection Error');
-      }
-      if (status === 'TIMED_OUT') {
-        console.warn('⌛ [Admin Page] Realtime Connection Timed Out.');
-      }
-    });
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log('✅ [Admin Page] Connected to Realtime!');
+        }
+        if (status === 'CHANNEL_ERROR') {
+          console.error('❌ [Admin Page] Realtime Connection Error:', err);
+        }
+      });
 
     return () => {
       supabase.removeChannel(channel);
@@ -56,96 +52,187 @@ export default function AdminPage() {
   }, []);
 
   const handleAction = async (id, action) => {
-    const endpoint =
-      action === 'approve'
-        ? `/api/approve/${id}`
-        : `/api/reject/${id}`;
+    const endpoint = action === 'approve' ? `/api/approve/${id}` : `/api/reject/${id}`;
+    
+    // Optimistic UI updates
+    if (action === 'approve') {
+      const itemToMove = pending.find(item => item.id === id);
+      if(itemToMove) {
+        setPending(prev => prev.filter(item => item.id !== id));
+        setApproved(prev => [itemToMove, ...prev]);
+      }
+    } else { // 'reject' or 'delete'
+      setPending(prev => prev.filter(item => item.id !== id));
+      setApproved(prev => prev.filter(item => item.id !== id));
+    }
 
-    await fetch(endpoint, { method: 'POST' });
-    // ไม่ต้องเรียก fetchSubmissions() เพราะ realtime จะจัดการเอง
+    try {
+      const response = await fetch(endpoint, { method: 'POST' });
+      if (!response.ok) {
+        console.error(`Failed to ${action} submission`);
+        fetchSubmissions(); 
+      }
+    } catch (error) {
+      console.error('Error performing action:', error);
+      fetchSubmissions();
+    }
   };
 
-  return (
-    <div className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
-      <h1 className="text-3xl font-bold mb-4">
-        รายการรออนุมัติ ({pending.length})
-      </h1>
-      {pending.length === 0 ? (
-        <p className="text-gray-400">ไม่มีรายการรออนุมัติ</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {pending.map((item) => (
-            <div
-              key={item.id}
-              className="bg-gray-800 rounded-lg overflow-hidden shadow-lg"
-            >
-              <img
-                src={item.imageUrl}
-                alt="submission"
-                className="w-full h-48 object-cover"
-              />
-              <div className="p-4">
-                <p className="font-bold">"{item.message}"</p>
-                <p className="text-sm text-gray-400">
-                  จาก: {item.name} ({item.socialType})
-                </p>
-                <p className="text-sm text-gray-400">
-                  โต๊ะ: {item.tableNumber}
-                </p>
-                <div className="flex justify-between mt-4 gap-2">
-                  <button
-                    onClick={() => handleAction(item.id, 'reject')}
-                    className="w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded transition-colors"
-                  >
-                    ไม่อนุมัติ
-                  </button>
-                  <button
-                    onClick={() => handleAction(item.id, 'approve')}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition-colors"
-                  >
-                    อนุมัติ
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
 
-      <h1 className="text-3xl font-bold mt-8 mb-4">
-        รูปที่อนุมัติแล้ว ({approved.length})
-      </h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {approved.map((item) => (
-          <div
-            key={item.id}
-            className="bg-gray-800 rounded-lg overflow-hidden shadow-lg"
-          >
-            <img
-              src={item.imageUrl}
-              alt="submission"
-              className="w-full h-48 object-cover"
-            />
-            <div className="p-4">
-              <p className="font-bold">"{item.message}"</p>
-              <p className="text-sm text-gray-400">
-                จาก: {item.name} ({item.socialType})
-              </p>
-              <p className="text-sm text-gray-400">
-                โต๊ะ: {item.tableNumber}
-              </p>
-              <div className="mt-4">
-                <button
-                  onClick={() => handleAction(item.id, 'reject')}
-                  className="w-full bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition-colors"
-                >
-                  ลบ
-                </button>
-              </div>
+  if (loading) {
+    return <div style={{ color: 'white', textAlign: 'center', paddingTop: '50px' }}>Loading Admin Panel...</div>;
+  }
+
+  return (
+    <>
+      {/* --- ✨ เพิ่มโค้ด CSS สำหรับจัดสไตล์ ✨ --- */}
+      <style>{`
+        .admin-container {
+          padding: 2rem;
+          color: #e5e7eb;
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+        .admin-container h1 {
+          font-size: 2.5rem;
+          font-weight: bold;
+          border-bottom: 2px solid #4b5563;
+          padding-bottom: 1rem;
+          margin-bottom: 2rem;
+        }
+        .section {
+          margin-bottom: 3rem;
+        }
+        .section h2 {
+          font-size: 1.8rem;
+          font-weight: 600;
+          margin-bottom: 1.5rem;
+        }
+        .grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 1.5rem;
+        }
+        .card {
+          background-color: #1f2937;
+          border-radius: 12px;
+          overflow: hidden;
+          box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+          display: flex;
+          flex-direction: column;
+        }
+        .card img {
+          width: 100%;
+          height: 250px;
+          object-fit: cover;
+        }
+        .card .info {
+          padding: 1rem;
+          flex-grow: 1;
+        }
+        .card .info p {
+          margin: 0 0 0.5rem 0;
+          color: #d1d5db;
+        }
+        .card .info p:first-child { /* Message */
+          font-style: italic;
+          font-size: 1.1rem;
+          color: #fff;
+          margin-bottom: 1rem;
+        }
+        .card .actions {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.5rem;
+          padding: 0 1rem 1rem 1rem;
+        }
+        .card.approved-card .actions {
+           grid-template-columns: 1fr;
+        }
+        .card button {
+          border: none;
+          padding: 0.75rem 1rem;
+          border-radius: 8px;
+          font-weight: bold;
+          cursor: pointer;
+          transition: transform 0.2s ease;
+        }
+        .card button:hover {
+            transform: scale(1.05);
+        }
+        .btn-approve {
+          background-color: #22c55e;
+          color: white;
+        }
+        .btn-reject {
+          background-color: #ef4444;
+          color: white;
+        }
+        .btn-delete {
+          background-color: #4b5563;
+          color: #e5e7eb;
+        }
+        .no-items {
+            background-color: #1f2937;
+            padding: 2rem;
+            border-radius: 12px;
+            text-align: center;
+            font-style: italic;
+            color: #9ca3af;
+        }
+      `}</style>
+
+      <div className="admin-container">
+        <h1>Admin Panel</h1>
+        
+        <div className="section">
+          <h2>รายการรออนุมัติ ({pending.length})</h2>
+          {pending.length === 0 ? (
+            <div className="no-items">ไม่มีรายการรออนุมัติ</div>
+          ) : (
+            <div className="grid">
+              {pending.map((item) => (
+                <div key={item.id} className="card">
+                  <img src={item.imageUrl} alt="submission" />
+                  <div className="info">
+                    <p><strong>"{item.message || 'ไม่มีข้อความ'}"</strong></p>
+                    <p>{item.name} ({item.socialType})</p>
+                    <p>โต๊ะ: {item.tableNumber}</p>
+                  </div>
+                  <div className="actions">
+                    <button className="btn-reject" onClick={() => handleAction(item.id, 'reject')}>ไม่อนุมัติ</button>
+                    <button className="btn-approve" onClick={() => handleAction(item.id, 'approve')}>อนุมัติ</button>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
-        ))}
+          )}
+        </div>
+
+        <div className="section">
+          <h2>รูปที่อนุมัติแล้ว ({approved.length})</h2>
+          {approved.length === 0 ? (
+            <div className="no-items">ยังไม่มีรูปที่อนุมัติ</div>
+          ) : (
+            <div className="grid">
+              {approved.map((item) => (
+                <div key={item.id} className="card approved-card">
+                  <img src={item.imageUrl} alt="submission" />
+                  <div className="info">
+                    <p><strong>"{item.message || 'ไม่มีข้อความ'}"</strong></p>
+                    <p>{item.name} ({item.socialType})</p>
+                    <p>โต๊ะ: {item.tableNumber}</p>
+                  </div>
+                   <div className="actions">
+                    <button className="btn-delete" onClick={() => handleAction(item.id, 'reject')}>ลบ</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
+
