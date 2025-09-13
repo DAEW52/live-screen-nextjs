@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"yarn next-dev\" \"yarn socket-server\"",
+    "dev": "next dev",
     "next-dev": "next dev",
     "socket-server": "node server.js",
     "build": "next build",
@@ -13,10 +13,11 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
     "ansi-styles": "6.2.3",
-    "next": "14.2.4",
+    "next": "^14.2.32",
     "react": "^18",
     "react-dom": "^18",
     "react-qr-code": "^2.0.18",
+    "sharp": "^0.34.3",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.7.5"
   },
