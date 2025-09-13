@@ -62,5 +62,5 @@ export async function POST(request) {
     console.error('Upload API Error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-} // --- ✨ ปีกกาที่หายไปอยู่ตรงนี้ครับ ✨ ---
+}
 
