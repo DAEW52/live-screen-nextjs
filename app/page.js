@@ -1,16 +1,22 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import imageCompression from 'browser-image-compression';
 
 export default function HomePage() {
-  // --- 1. สร้าง State เพิ่มสำหรับจัดการข้อมูลและไฟล์ ---
-  const [social, setSocial] = useState('facebook');
+  // --- 1. State สำหรับจัดการข้อมูลในฟอร์ม ---
+  const [socialType, setSocialType] = useState('facebook');
   const [username, setUsername] = useState('');
   const [tableNumber, setTableNumber] = useState('');
   const [caption, setCaption] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null); // State สำหรับเก็บไฟล์จริงๆ
+  const [selectedFile, setSelectedFile] = useState(null);
   const [fileName, setFileName] = useState('');
   const fileInputRef = useRef(null);
+  
+  // --- State ใหม่สำหรับแสดงสถานะการอัปโหลด ---
+  const [status, setStatus] = useState('ยังไม่มีการอัปโหลด');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
 
   const handleUploadBoxClick = () => {
     fileInputRef.current.click();
@@ -19,54 +25,78 @@ export default function HomePage() {
   const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
-      setSelectedFile(file); // เก็บ Object ของไฟล์ไว้
+      setSelectedFile(file);
       setFileName(file.name);
+      setStatus(`เลือกไฟล์: ${file.name}`);
     }
   };
   
-  // --- 2. สร้างฟังก์ชัน handleSubmit สำหรับส่งข้อมูล ---
+  // --- 2. ฟังก์ชัน handleSubmit ที่มีตรรกะการบีบอัดรูปภาพ ---
   const handleSubmit = async (event) => {
-    event.preventDefault(); // ป้องกันไม่ให้หน้าเว็บรีเฟรช
+    event.preventDefault();
     
     if (!selectedFile) {
       alert('กรุณาเลือกรูปภาพก่อนครับ');
       return;
     }
     
-    // 3. สร้าง FormData เพื่อเตรียมส่งข้อมูล
-    const formData = new FormData();
-    formData.append('file', selectedFile);
-    formData.append('socialType', social);
-    formData.append('name', username);
-    formData.append('tableNumber', tableNumber);
-    formData.append('message', caption);
-    
+    setIsSubmitting(true);
+    setStatus('กำลังบีบอัดรูปภาพ...');
+
+    const options = {
+      maxSizeMB: 4,
+      maxWidthOrHeight: 1920,
+      useWebWorker: true,
+    };
+
     try {
-      // 4. ใช้ fetch เพื่อส่งข้อมูลไปที่ API
+      const compressedFile = await imageCompression(selectedFile, options);
+      setStatus('กำลังอัปโหลด...');
+      
+      const formData = new FormData();
+      formData.append('file', compressedFile, selectedFile.name);
+      formData.append('socialType', socialType);
+      formData.append('name', username);
+      formData.append('tableNumber', tableNumber);
+      formData.append('message', caption);
+      
       const response = await fetch('/api/upload', {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('อัปโหลดไม่สำเร็จ');
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Server responded with ${response.status}`);
       }
 
       const result = await response.json();
       console.log('Success:', result);
-      alert('อัปโหลดรูปภาพสำเร็จแล้ว!');
-      // (Optional) เคลียร์ฟอร์มหลังส่งสำเร็จ
+      setStatus('อัปโหลดสำเร็จ! รอการอนุมัติ');
+      
+      // เคลียร์ฟอร์ม
       setUsername('');
       setTableNumber('');
       setCaption('');
       setSelectedFile(null);
       setFileName('');
+      fileInputRef.current.value = null;
 
     } catch (error) {
       console.error('Error:', error);
-      alert(error.message);
+      setStatus(`เกิดข้อผิดพลาด: ${error.message}`);
+    } finally {
+        setIsSubmitting(false);
     }
   };
+  
+  // --- ฟังก์ชันสำหรับปุ่ม "ลบรูป" ---
+  const handleClearFile = () => {
+      setSelectedFile(null);
+      setFileName('');
+      setStatus('ยังไม่มีการอัปโหลด');
+      fileInputRef.current.value = null;
+  }
 
   return (
     <main className="form-container">
@@ -74,29 +104,28 @@ export default function HomePage() {
       <div className="form-column">
         <h1 className="form-title">THER Phuket • ส่งรูปขึ้นจอ</h1>
         
-        {/* 5. แก้ไข Form Tag ให้เรียกใช้ handleSubmit */}
         <form id="uploadForm" className="form-body" onSubmit={handleSubmit}>
           <div className="form-group">
             <label>โซเชียล</label>
             <div className="radio-group">
-              <label className={social === 'facebook' ? 'active' : ''}>
-                <input type="radio" name="social" value="facebook" checked={social === 'facebook'} onChange={(e) => setSocial(e.target.value)} /> Facebook
+              <label className={socialType === 'facebook' ? 'active' : ''}>
+                <input type="radio" name="social" value="facebook" checked={socialType === 'facebook'} onChange={(e) => setSocialType(e.target.value)} /> Facebook
               </label>
-              <label className={social === 'instagram' ? 'active' : ''}>
-                <input type="radio" name="social" value="instagram" checked={social === 'instagram'} onChange={(e) => setSocial(e.target.value)} /> Instagram
+              <label className={socialType === 'instagram' ? 'active' : ''}>
+                <input type="radio" name="social" value="instagram" checked={socialType === 'instagram'} onChange={(e) => setSocialType(e.target.value)} /> Instagram
               </label>
-              <label className={social === 'line' ? 'active' : ''}>
-                <input type="radio" name="social" value="line" checked={social === 'line'} onChange={(e) => setSocial(e.target.value)} /> LINE
+              <label className={socialType === 'line' ? 'active' : ''}>
+                <input type="radio" name="social" value="line" checked={socialType === 'line'} onChange={(e) => setSocialType(e.target.value)} /> LINE
               </label>
             </div>
           </div>
           <div className="form-group">
             <label htmlFor="username">ชื่อในโซเชียล</label>
-            <input id="username" type="text" placeholder="@username" value={username} onChange={(e) => setUsername(e.target.value)} />
+            <input id="username" type="text" placeholder="@username" value={username} onChange={(e) => setUsername(e.target.value)} required/>
           </div>
           <div className="form-group">
             <label htmlFor="table">เบอร์โต๊ะ</label>
-            <input id="table" type="text" placeholder="เช่น 14, B5" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} />
+            <input id="table" type="text" placeholder="เช่น 14, B5" value={tableNumber} onChange={(e) => setTableNumber(e.target.value)} required/>
           </div>
           <div className="form-group">
             <label htmlFor="caption">แคปชั่น</label>
@@ -104,23 +133,23 @@ export default function HomePage() {
           </div>
           <div className="form-group">
             <label>คุณภาพรูป (ออพชั่น)</label>
-             <select defaultValue="standard">
+              <select defaultValue="standard">
                 <option value="standard">มาตรฐาน (อัปโหลดเร็ว)</option>
-                <option value="hd">คมชัดสูง (ใช้เวลาเล็กน้อย)</option>
-            </select>
+                <option value="hd" disabled>คมชัดสูง (เร็วๆ นี้)</option>
+              </select>
           </div>
           <div className="form-group">
-             <label htmlFor="upload">เลือกรูป / ลากมาวาง</label>
-             <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} accept="image/png, image/jpeg, image/gif" />
-             <div className="upload-box" onClick={handleUploadBoxClick}>
+              <label htmlFor="upload">เลือกรูป / ลากมาวาง</label>
+              <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} accept="image/png, image/jpeg, image/gif" />
+              <div className="upload-box" onClick={handleUploadBoxClick}>
                 {fileName ? (<span>{fileName}</span>) : (
                   <>
                     คลิกเพื่อเลือก หรือ ลากไฟล์มาวางที่นี่
                     <br />
-                    <small>รองรับไฟล์ JPG, PNG, GIF ขนาดไม่เกิน 10MB</small>
+                    <small>รองรับไฟล์ JPG, PNG, GIF</small>
                   </>
                 )}
-             </div>
+              </div>
           </div>
         </form>
       </div>
@@ -129,20 +158,24 @@ export default function HomePage() {
       <div className="tips-column">
         <div className="tips-box">
             <h2>ข้อช่วย & สถานะ</h2>
+            <div className="status-display">
+                <p>สถานะปัจจุบัน: <strong>{status}</strong></p>
+            </div>
             <h3>Quick Tips</h3>
             <ul>
                 <li>เพื่อให้รูปที่ส่งไป/แชร์มาในโซเชียลฯ ระบบจะปรับขนาดอัตโนมัติให้พอดีจอแสดงผล</li>
                 <li>เลือกคุณภาพภาพ "มาตรฐาน" เพื่ออัปโหลดรวดเร็วและคมชัดพอใช้ได้</li>
-                <li>ถ้าไฟล์ภาพไม่สำาคัญ ระบบจะแจ้ง "คิวรอดส่ง" และลองส่งให้อัตโนมัติ</li>
-                <li>คิวรอดส่ง (ออฟไลน์)</li>
+                <li>ระบบจะบีบอัดไฟล์ภาพขนาดใหญ่ให้โดยอัตโนมัติ</li>
             </ul>
             <div className="button-group">
-                {/* 6. แก้ไขปุ่มให้ผูกกับฟอร์ม */}
-                <button type="submit" form="uploadForm" className="btn-submit">ส่งเข้าทั้งหมด</button>
-                <button type="button" className="btn-clear">ลบรูป</button>
+                <button type="submit" form="uploadForm" className="btn-submit" disabled={isSubmitting}>
+                    {isSubmitting ? 'กำลังส่ง...' : 'ส่งทั้งหมด'}
+                </button>
+                <button type="button" className="btn-clear" onClick={handleClearFile} disabled={isSubmitting}>ลบรูป</button>
             </div>
         </div>
       </div>
     </main>
   );
 }
+
