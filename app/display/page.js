@@ -64,11 +64,10 @@ const SocialIcon = ({ type }) => {
 
 export default function DisplayPage() {
   const [uploadUrl, setUploadUrl] = useState('');
-  const [currentContent, setCurrentContent] = useState(null); // State สำหรับข้อมูล (ข้อความ, ชื่อ)
+  const [currentContent, setCurrentContent] = useState(null);
   const [isIdle, setIsIdle] = useState(true);
   const [countdown, setCountdown] = useState(0);
 
-  // --- ✨ 1. State สำหรับจัดการ "เวที" ทั้งสอง ✨ ---
   const [imageSlots, setImageSlots] = useState([ { src: null, visible: false }, { src: null, visible: false } ]);
   const [activeSlot, setActiveSlot] = useState(0);
 
@@ -91,7 +90,7 @@ export default function DisplayPage() {
       if (data && data.length > 0) {
         slideShowData.current.list = data;
         slideShowData.current.ids = new Set(data.map(item => item.id));
-        // --- ✨ แสดงรูปแรกเมื่อโหลดเสร็จ ✨ ---
+        
         const firstItem = data[0];
         slideShowData.current.currentIndex = 0;
         setImageSlots([{ src: firstItem.imageUrl, visible: true }, { src: null, visible: false }]);
@@ -148,12 +147,11 @@ export default function DisplayPage() {
       }
       
       if (nextItem) {
-        // --- ✨ 2. อัปเดต "เวที" ที่ซ่อนอยู่ และสลับการมองเห็น ✨ ---
         const nextSlot = (activeSlot + 1) % 2;
         setImageSlots(prevSlots => {
             const newSlots = [...prevSlots];
-            newSlots[nextSlot] = { src: nextItem.imageUrl, visible: true }; // เตรียมรูปใหม่และทำให้มองเห็น
-            newSlots[activeSlot] = { ...newSlots[activeSlot], visible: false }; // ซ่อนรูปเก่า
+            newSlots[nextSlot] = { src: nextItem.imageUrl, visible: true };
+            newSlots[activeSlot] = { ...newSlots[activeSlot], visible: false };
             return newSlots;
         });
         setActiveSlot(nextSlot);
@@ -167,7 +165,7 @@ export default function DisplayPage() {
     }, DELAY);
 
     return () => clearInterval(timer);
-  }, [activeSlot]); // ทำงานใหม่เมื่อ activeSlot เปลี่ยน
+  }, [activeSlot]);
 
   useEffect(() => {
     if (!currentContent) return;
@@ -188,7 +186,7 @@ export default function DisplayPage() {
           left: 0;
           width: 100%;
           height: 100%;
-          transition: opacity 1.5s ease-in-out; /* --- ✨ แอนิเมชัน Crossfade ✨ --- */
+          transition: opacity 1.5s ease-in-out;
         }
         .image-slot img {
           width: 100%;
@@ -199,26 +197,29 @@ export default function DisplayPage() {
           from { transform: translateY(20px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
         }
-        .fade-in-up {
-          animation: fadeInUp 0.8s ease-out forwards;
+        .content-overlay {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          pointer-events: none;
+          opacity: 0;
+          transition: opacity 0.8s ease-out;
+        }
+        .content-overlay.visible {
+            opacity: 1;
         }
       `}</style>
 
-      {/* --- ✨ 3. สร้าง "เวที" ทั้งสอง ✨ --- */}
       {imageSlots.map((slot, index) => (
         <div key={index} className="image-slot" style={{ opacity: slot.visible ? 1 : 0 }}>
           {slot.src && <img src={slot.src} alt={`display-slot-${index}`} />}
         </div>
       ))}
-
-      <div className="overlay-container" style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        width: '100%',
-        height: '100%',
-        pointerEvents: 'none',
-      }}>
+      
+      {/* --- ✨ 1. สร้างคอนเทนเนอร์สำหรับ Overlays ทั้งหมด ✨ --- */}
+      <div className={`content-overlay ${currentContent ? 'visible' : ''}`}>
         {isIdle && (
             <div id="idle" style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
                 <h1 id="idleBrand">THER Phuket</h1>
@@ -239,13 +240,13 @@ export default function DisplayPage() {
         )}
         
         {currentContent && (
-            <div key={currentContent.id} style={{
+            <div style={{
                 position: 'absolute', top: '70%', left: '50%',
                 transform: 'translate(-50%, -50%)', width: '90%',
             }}>
-                <h1 className="text fade-in-up" style={{ 
-                    textAlign: 'center', animationDelay: '0.3s', fontSize: '5rem',
-                    textShadow: '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000, 7px 7px 10px rgba(0,0,0,0.8)',
+                <h1 className="text" style={{ 
+                    textAlign: 'center', fontSize: '5rem',
+                    textShadow: '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000, 7px 7px 10px rgba(0,0,0,0.7)',
                 }}>
                     "{currentContent.message}"
                 </h1>
@@ -260,8 +261,8 @@ export default function DisplayPage() {
         }}>
             <div>
               {currentContent && (
-                <div key={currentContent.id} className="fade-in-up" style={{ 
-                  animationDelay: '0.5s', display: 'flex', flexDirection: 'column', 
+                <div style={{ 
+                  display: 'flex', flexDirection: 'column', 
                   alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.5)',
                   padding: '20px 25px', borderRadius: '10px'
                 }}>
@@ -274,8 +275,8 @@ export default function DisplayPage() {
               )}
             </div>
             
-            <div className="fade-in-up" style={{ 
-              animationDelay: '0.5s', backgroundColor: 'white',
+            <div style={{ 
+              backgroundColor: 'white',
               padding: '10px', borderRadius: '10px'
             }}>
                 {uploadUrl && <QRCode value={uploadUrl} size={160} />}
