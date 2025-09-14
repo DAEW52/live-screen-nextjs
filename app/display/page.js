@@ -8,7 +8,6 @@ const QRCode = dynamic(() => import('react-qr-code'), { ssr: false });
 
 const SocialIcon = ({ type }) => {
   const socialType = type?.toLowerCase();
-  // --- ✨ 1. ปรับขนาดไอคอน ✨ ---
   const iconSize = "48";
 
   if (socialType === 'facebook') {
@@ -56,13 +55,6 @@ const SocialIcon = ({ type }) => {
       </svg>
     );
   }
-  if (socialType === 'tiktok') {
-    return (
-      <svg xmlns="http://www.w3.org/2000/svg" width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="white">
-        <path d="M12.48 2.502c-2.825-.02-5.41.944-7.46 2.926v8.046c.01 3.51 2.37 6.64 5.67 7.79.48.17.98.26 1.49.26.1 0 .2-.01.3-.02.43-.05.85-.15 1.27-.3 3.32-1.15 5.68-4.28 5.67-7.77v-8.03c-2.02-1.99-4.57-2.96-7.36-2.92zm2.02 14.53v-2.02c-1.83.02-3.66.02-5.49 0v-2.1c1.83 0 3.66 0 5.49 0v-2.08c1.83 0 3.66 0 5.49 0v-2.08c-1.83 0-3.66 0-5.49 0V6.7c-1.63-.01-3.27-.01-4.9 0v8.28c1.63.02 3.27.02 4.9 0z"/>
-      </svg>
-    );
-  }
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="white">
       <path d="M12 0c-6.627 0-12 5.373-12 12s5.373 12 12 12 12-5.373 12-12-5.373-12-12-12zm0 22c-5.514 0-10-4.486-10-10s4.486-10 10-10 10 4.486 10 10-4.486 10-10 10zm0-18c-2.761 0-5 2.239-5 5s2.239 5 5 5 5-2.239 5-5-2.239-5-5-5zm0 11c-3.866 0-7 2.19-7 5v1c0 .552.448 1 1 1h12c.552 0 1-.448 1-1v-1c0-2.81-3.134-5-7-5z"/>
@@ -72,9 +64,13 @@ const SocialIcon = ({ type }) => {
 
 export default function DisplayPage() {
   const [uploadUrl, setUploadUrl] = useState('');
-  const [currentImage, setCurrentImage] = useState(null);
+  const [currentContent, setCurrentContent] = useState(null); // State สำหรับข้อมูล (ข้อความ, ชื่อ)
   const [isIdle, setIsIdle] = useState(true);
   const [countdown, setCountdown] = useState(0);
+
+  // --- ✨ 1. State สำหรับจัดการ "เวที" ทั้งสอง ✨ ---
+  const [imageSlots, setImageSlots] = useState([ { src: null, visible: false }, { src: null, visible: false } ]);
+  const [activeSlot, setActiveSlot] = useState(0);
 
   const slideShowData = useRef({
     list: [],
@@ -92,9 +88,15 @@ export default function DisplayPage() {
         .select('*')
         .eq('status', 'approved')
         .order('created_at', { ascending: true });
-      if (data) {
+      if (data && data.length > 0) {
         slideShowData.current.list = data;
         slideShowData.current.ids = new Set(data.map(item => item.id));
+        // --- ✨ แสดงรูปแรกเมื่อโหลดเสร็จ ✨ ---
+        const firstItem = data[0];
+        slideShowData.current.currentIndex = 0;
+        setImageSlots([{ src: firstItem.imageUrl, visible: true }, { src: null, visible: false }]);
+        setCurrentContent(firstItem);
+        setIsIdle(false);
       }
     };
 
@@ -123,14 +125,7 @@ export default function DisplayPage() {
           }
         }
       )
-      .subscribe((status, err) => {
-        if (status === 'SUBSCRIBED') {
-          console.log('✅ [Display Page] Connected to Realtime!');
-        }
-        if (status === 'CHANNEL_ERROR') {
-          console.error('❌ [Display Page] Realtime Connection Error:', err);
-        }
-      });
+      .subscribe();
 
     return () => supabase.removeChannel(channel);
   }, []);
@@ -143,6 +138,8 @@ export default function DisplayPage() {
       
       if (slideShowData.current.queue.length > 0) {
         nextItem = slideShowData.current.queue.shift();
+        const newIndex = slideShowData.current.list.findIndex(item => item.id === nextItem.id);
+        if (newIndex !== -1) slideShowData.current.currentIndex = newIndex;
       } 
       else if (slideShowData.current.list.length > 0) {
         const nextIndex = (slideShowData.current.currentIndex + 1) % slideShowData.current.list.length;
@@ -150,56 +147,70 @@ export default function DisplayPage() {
         nextItem = slideShowData.current.list[nextIndex];
       }
       
-      setCurrentImage(nextItem);
-      setIsIdle(!nextItem);
+      if (nextItem) {
+        // --- ✨ 2. อัปเดต "เวที" ที่ซ่อนอยู่ และสลับการมองเห็น ✨ ---
+        const nextSlot = (activeSlot + 1) % 2;
+        setImageSlots(prevSlots => {
+            const newSlots = [...prevSlots];
+            newSlots[nextSlot] = { src: nextItem.imageUrl, visible: true }; // เตรียมรูปใหม่และทำให้มองเห็น
+            newSlots[activeSlot] = { ...newSlots[activeSlot], visible: false }; // ซ่อนรูปเก่า
+            return newSlots;
+        });
+        setActiveSlot(nextSlot);
+        setCurrentContent(nextItem);
+        setIsIdle(false);
+      } else {
+        setIsIdle(true);
+        setCurrentContent(null);
+      }
 
     }, DELAY);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [activeSlot]); // ทำงานใหม่เมื่อ activeSlot เปลี่ยน
 
   useEffect(() => {
-    if (!currentImage) return;
+    if (!currentContent) return;
     const DELAY_SECONDS = 15000 / 1000;
     setCountdown(DELAY_SECONDS);
     const countdownInterval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev > 1) {
-          return prev - 1;
-        }
-        return DELAY_SECONDS;
-      });
+      setCountdown(prev => (prev > 1 ? prev - 1 : DELAY_SECONDS));
     }, 1000);
     return () => clearInterval(countdownInterval);
-  }, [currentImage]);
+  }, [currentContent]);
 
   return (
-    <div className="stage" style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+    <div className="stage" style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'black' }}>
       <style>{`
-        @keyframes zoomIn {
-          from { transform: scale(1.05); opacity: 0; }
-          to { transform: scale(1); opacity: 1; }
+        .image-slot {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          transition: opacity 1.5s ease-in-out; /* --- ✨ แอนิเมชัน Crossfade ✨ --- */
+        }
+        .image-slot img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
         }
         @keyframes fadeInUp {
           from { transform: translateY(20px); opacity: 0; }
           to { transform: translateY(0); opacity: 1; }
-        }
-        .zoom-in {
-          animation: zoomIn 1.2s ease-out forwards;
         }
         .fade-in-up {
           animation: fadeInUp 0.8s ease-out forwards;
         }
       `}</style>
 
-      {/* --- 1. รูปภาพพื้นหลัง --- */}
-      {currentImage && (
-        <div className="imgwrap zoom-in" style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
-            <img id="img" src={currentImage.imageUrl} alt="display" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      {/* --- ✨ 3. สร้าง "เวที" ทั้งสอง ✨ --- */}
+      {imageSlots.map((slot, index) => (
+        <div key={index} className="image-slot" style={{ opacity: slot.visible ? 1 : 0 }}>
+          {slot.src && <img src={slot.src} alt={`display-slot-${index}`} />}
         </div>
-      )}
+      ))}
 
-      {/* --- 2. คอนเทนเนอร์สำหรับ Overlays ทั้งหมด --- */}
       <div className="overlay-container" style={{
         position: 'absolute',
         top: 0,
@@ -208,96 +219,64 @@ export default function DisplayPage() {
         height: '100%',
         pointerEvents: 'none',
       }}>
-
-        {/* หน้าจอ Idle เริ่มต้น */}
         {isIdle && (
             <div id="idle" style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
                 <h1 id="idleBrand">THER Phuket</h1>
             </div>
         )}
         
-        {/* ตัวนับเวลา (มุมขวาบน) */}
-        {currentImage && (
+        {currentContent && (
              <div style={{
               position: 'absolute',
-              top: '2rem',
-              right: '2rem',
-              backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              color: 'white',
-              width: '50px',
-              height: '50px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '1.5rem',
-              fontWeight: 'bold',
-              border: '2px solid white',
-              pointerEvents: 'auto',
+              top: '2rem', right: '2rem', backgroundColor: 'rgba(0, 0, 0, 0.7)',
+              color: 'white', width: '50px', height: '50px',
+              borderRadius: '50%', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontSize: '1.5rem', fontWeight: 'bold',
+              border: '2px solid white', pointerEvents: 'auto',
             }}>
               {countdown}
             </div>
         )}
         
-        {/* --- 3. จัดตำแหน่งข้อความและเพิ่มขอบ ✨ --- */}
-        {currentImage && (
-            <div style={{
-                position: 'absolute',
-                top: '80%',
-                left: '50%',
-                transform: 'translate(-95%, -50%)',
-                width: '90%',
+        {currentContent && (
+            <div key={currentContent.id} style={{
+                position: 'absolute', top: '70%', left: '50%',
+                transform: 'translate(-50%, -50%)', width: '90%',
             }}>
-                <h1 id="msg" className="text fade-in-up" style={{ 
-                    textAlign: 'center',
-                    animationDelay: '0.3s',
-                    fontSize: '3rem',
-                    textShadow: '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000, 6px 6px 10px rgba(0,0,0,0.7)',
+                <h1 className="text fade-in-up" style={{ 
+                    textAlign: 'center', animationDelay: '0.3s', fontSize: '5rem',
+                    textShadow: '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000, 7px 7px 10px rgba(0,0,0,0.8)',
                 }}>
-                    "{currentImage.message}"
+                    "{currentContent.message}"
                 </h1>
             </div>
         )}
         
-        {/* Footer (ด้านล่าง) */}
         <div className="footer" style={{
-            position: 'absolute',
-            bottom: '2rem',
-            left: '2rem',
-            right: '2rem',
-            width: 'calc(100% - 4rem)',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'flex-end',
-            pointerEvents: 'auto',
+            position: 'absolute', bottom: '2rem', left: '2rem',
+            right: '2rem', width: 'calc(100% - 4rem)',
+            display: 'flex', justifyContent: 'space-between',
+            alignItems: 'flex-end', pointerEvents: 'auto',
         }}>
-            {/* ข้อมูลผู้ใช้ (ฝั่งซ้าย) */}
             <div>
-              {currentImage && (
-                <div className="fade-in-up" style={{ 
-                  animationDelay: '0.5s', 
-                  display: 'flex', 
-                  flexDirection: 'column', 
-                  alignItems: 'flex-start',
-                  backgroundColor: 'rgba(0,0,0,0.5)',
-                  padding: '20px 25px', 
-                  borderRadius: '10px'
+              {currentContent && (
+                <div key={currentContent.id} className="fade-in-up" style={{ 
+                  animationDelay: '0.5s', display: 'flex', flexDirection: 'column', 
+                  alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.5)',
+                  padding: '20px 25px', borderRadius: '10px'
                 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '25px' }}>
-                    <SocialIcon type={currentImage.socialType} />
-                    <p id="name" style={{ fontSize: '2.5rem', margin: 0 }}>{currentImage.name}</p>
+                    <SocialIcon type={currentContent.socialType} />
+                    <p style={{ fontSize: '2.5rem', margin: 0 }}>{currentContent.name}</p>
                   </div>
-                  <p id="table" style={{ fontSize: '2.5rem', margin: 0, marginTop: '10px' }}>โต๊ะ: {currentImage.tableNumber}</p>
+                  <p style={{ fontSize: '2.5rem', margin: 0, marginTop: '10px' }}>โต๊ะ: {currentContent.tableNumber}</p>
                 </div>
               )}
             </div>
             
-            {/* QR Code (ฝั่งขวา) */}
             <div className="fade-in-up" style={{ 
-              animationDelay: '0.5s', 
-              backgroundColor: 'white',
-              padding: '10px',
-              borderRadius: '10px'
+              animationDelay: '0.5s', backgroundColor: 'white',
+              padding: '10px', borderRadius: '10px'
             }}>
                 {uploadUrl && <QRCode value={uploadUrl} size={160} />}
             </div>
