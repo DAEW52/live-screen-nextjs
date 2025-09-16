@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import dynamic from 'next/dynamic';
 
@@ -67,20 +67,27 @@ export default function DisplayPage() {
   const [currentContent, setCurrentContent] = useState(null);
   const [isIdle, setIsIdle] = useState(true);
   const [countdown, setCountdown] = useState(0);
-
-  const [imageSlots, setImageSlots] = useState([ { src: null, visible: false }, { src: null, visible: false } ]);
+  const [imageSlots, setImageSlots] = useState([
+    { src: null, visible: false }, 
+    { src: null, visible: false }
+  ]);
   const [activeSlot, setActiveSlot] = useState(0);
 
-  const slideShowData = useRef({
-    list: [],
-    queue: [],
+  const dataRef = useRef({
+    approvedList: [],
+    newItemsQueue: [],
     currentIndex: -1,
     ids: new Set(),
+    lastIndexBeforeQueue: null, // --- ✨ เพิ่มตัวแปรสำหรับ "จดจำ" ตำแหน่ง ✨ ---
   });
+
+  const activeSlotRef = useRef(activeSlot);
+  useEffect(() => {
+    activeSlotRef.current = activeSlot;
+  }, [activeSlot]);
 
   useEffect(() => {
     setUploadUrl(window.location.origin);
-
     const fetchInitialData = async () => {
       const { data } = await supabase
         .from('submissions')
@@ -88,70 +95,72 @@ export default function DisplayPage() {
         .eq('status', 'approved')
         .order('created_at', { ascending: true });
       if (data && data.length > 0) {
-        slideShowData.current.list = data;
-        slideShowData.current.ids = new Set(data.map(item => item.id));
-        
-        const firstItem = data[0];
-        slideShowData.current.currentIndex = 0;
-        setImageSlots([{ src: firstItem.imageUrl, visible: true }, { src: null, visible: false }]);
-        setCurrentContent(firstItem);
-        setIsIdle(false);
+        const slideData = dataRef.current;
+        slideData.approvedList = data;
+        slideData.ids = new Set(data.map(item => item.id));
       }
     };
-
     fetchInitialData();
-
-    const channel = supabase
-      .channel('realtime display')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'submissions' },
+    
+    const channel = supabase.channel('realtime display')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, 
         (payload) => {
+          const data = dataRef.current;
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
-            if (payload.new.status === 'approved') {
-              const newItem = payload.new;
-              if (!slideShowData.current.ids.has(newItem.id)) {
-                slideShowData.current.ids.add(newItem.id);
-                slideShowData.current.list.push(newItem);
-                slideShowData.current.queue.push(newItem);
-              }
+            if (payload.new.status === 'approved' && !data.ids.has(payload.new.id)) {
+              data.ids.add(payload.new.id);
+              data.approvedList.push(payload.new);
+              data.newItemsQueue.push(payload.new);
             }
           } else if (payload.eventType === 'DELETE') {
             const deletedId = payload.old.id;
-            slideShowData.current.ids.delete(deletedId);
-            slideShowData.current.list = slideShowData.current.list.filter(item => item.id !== deletedId);
-            slideShowData.current.queue = slideShowData.current.queue.filter(item => item.id !== deletedId);
+            if (data.ids.has(deletedId)) {
+                data.ids.delete(deletedId);
+                data.approvedList = data.approvedList.filter(item => item.id !== deletedId);
+                data.newItemsQueue = data.newItemsQueue.filter(item => item.id !== deletedId);
+            }
           }
         }
-      )
-      .subscribe();
-
+      ).subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
 
   useEffect(() => {
     const DELAY = 15000;
-
-    const timer = setInterval(() => {
+    const tick = () => {
+      const data = dataRef.current;
       let nextItem = null;
-      
-      if (slideShowData.current.queue.length > 0) {
-        nextItem = slideShowData.current.queue.shift();
-        const newIndex = slideShowData.current.list.findIndex(item => item.id === nextItem.id);
-        if (newIndex !== -1) slideShowData.current.currentIndex = newIndex;
-      } 
-      else if (slideShowData.current.list.length > 0) {
-        const nextIndex = (slideShowData.current.currentIndex + 1) % slideShowData.current.list.length;
-        slideShowData.current.currentIndex = nextIndex;
-        nextItem = slideShowData.current.list[nextIndex];
+
+      if (data.newItemsQueue.length > 0) {
+        // --- ✨ 1. เมื่อมีรูปใหม่ ให้ "จดจำ" ตำแหน่งปัจจุบันไว้ก่อน ✨ ---
+        data.lastIndexBeforeQueue = data.currentIndex;
+        nextItem = data.newItemsQueue.shift();
+        const itemIndex = data.approvedList.findIndex(item => item.id === nextItem.id);
+        if (itemIndex !== -1) {
+          data.currentIndex = itemIndex;
+        }
+      } else if (data.approvedList.length > 0) {
+        let nextIndex;
+        // --- ✨ 2. ตรวจสอบว่าเราเพิ่งเล่นรูปจากคิวด่วนจบไปหรือไม่ ✨ ---
+        if (data.lastIndexBeforeQueue !== null) {
+          // ถ้าใช่ ให้กลับไปเล่นต่อจากตำแหน่งที่จำไว้
+          nextIndex = (data.lastIndexBeforeQueue + 1) % data.approvedList.length;
+          data.lastIndexBeforeQueue = null; // เคลียร์ความจำ
+        } else {
+          // ถ้าไม่ใช่ ก็เล่นตามลำดับปกติ
+          nextIndex = (data.currentIndex + 1) % data.approvedList.length;
+        }
+        data.currentIndex = nextIndex;
+        nextItem = data.approvedList[data.currentIndex];
       }
-      
+
       if (nextItem) {
-        const nextSlot = (activeSlot + 1) % 2;
-        setImageSlots(prevSlots => {
-            const newSlots = [...prevSlots];
+        const currentActiveSlot = activeSlotRef.current;
+        const nextSlot = (currentActiveSlot + 1) % 2;
+        setImageSlots(prev => {
+            const newSlots = [...prev];
             newSlots[nextSlot] = { src: nextItem.imageUrl, visible: true };
-            newSlots[activeSlot] = { ...newSlots[activeSlot], visible: false };
+            newSlots[currentActiveSlot] = { ...newSlots[currentActiveSlot], visible: false };
             return newSlots;
         });
         setActiveSlot(nextSlot);
@@ -161,24 +170,26 @@ export default function DisplayPage() {
         setIsIdle(true);
         setCurrentContent(null);
       }
-
-    }, DELAY);
-
-    return () => clearInterval(timer);
-  }, [activeSlot]);
+    };
+    
+    const timerId = setInterval(tick, DELAY);
+    return () => clearInterval(timerId);
+  }, []);
 
   useEffect(() => {
     if (!currentContent) return;
-    const DELAY_SECONDS = 15000 / 1000;
-    setCountdown(DELAY_SECONDS);
-    const countdownInterval = setInterval(() => {
-      setCountdown(prev => (prev > 1 ? prev - 1 : DELAY_SECONDS));
+    setCountdown(15);
+    const countdownTimer = setInterval(() => {
+      setCountdown(prev => prev > 1 ? prev - 1 : 15);
     }, 1000);
-    return () => clearInterval(countdownInterval);
+    return () => clearInterval(countdownTimer);
   }, [currentContent]);
 
   return (
-    <div className="stage" style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden', backgroundColor: 'black' }}>
+    <div className="stage" style={{ 
+      position: 'relative', width: '100vw', height: '100vh', 
+      overflow: 'hidden', backgroundColor: 'black' 
+    }}>
       <style>{`
         .image-slot {
           position: absolute;
@@ -193,10 +204,6 @@ export default function DisplayPage() {
           height: 100%;
           object-fit: cover;
         }
-        @keyframes fadeInUp {
-          from { transform: translateY(20px); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
         .content-overlay {
           position: absolute;
           top: 0;
@@ -205,10 +212,10 @@ export default function DisplayPage() {
           height: 100%;
           pointer-events: none;
           opacity: 0;
-          transition: opacity 0.8s ease-out;
+          transition: opacity 0.8s ease-out 0.5s;
         }
         .content-overlay.visible {
-            opacity: 1;
+          opacity: 1;
         }
       `}</style>
 
@@ -218,69 +225,72 @@ export default function DisplayPage() {
         </div>
       ))}
       
-      {/* --- ✨ 1. สร้างคอนเทนเนอร์สำหรับ Overlays ทั้งหมด ✨ --- */}
-      <div className={`content-overlay ${currentContent ? 'visible' : ''}`}>
+      <div key={currentContent?.id} className={`content-overlay ${currentContent ? 'visible' : ''}`}>
         {isIdle && (
-            <div id="idle" style={{width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center'}}>
-                <h1 id="idleBrand">THER Phuket</h1>
-            </div>
+          <div style={{
+            width: '100%', height: '100%', display: 'flex', 
+            justifyContent: 'center', alignItems: 'center'
+          }}>
+            <h1 style={{ color: 'white', fontSize: '6rem' }}>THER Phuket</h1>
+          </div>
         )}
         
         {currentContent && (
-             <div style={{
-              position: 'absolute',
-              top: '2rem', right: '2rem', backgroundColor: 'rgba(0, 0, 0, 0.7)',
-              color: 'white', width: '50px', height: '50px',
-              borderRadius: '50%', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', fontSize: '1.5rem', fontWeight: 'bold',
-              border: '2px solid white', pointerEvents: 'auto',
-            }}>
-              {countdown}
-            </div>
+          <div style={{
+            position: 'absolute', top: '2rem', right: '2rem', 
+            backgroundColor: 'rgba(0, 0, 0, 0.7)', color: 'white', 
+            width: '50px', height: '50px', borderRadius: '50%', 
+            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            fontSize: '1.5rem', fontWeight: 'bold', border: '2px solid white'
+          }}>
+            {countdown}
+          </div>
         )}
         
         {currentContent && (
-            <div style={{
-                position: 'absolute', top: '70%', left: '50%',
-                transform: 'translate(-50%, -50%)', width: '90%',
+          <div style={{
+            position: 'absolute', top: '70%', left: '50%',
+            transform: 'translate(-50%, -50%)', width: '90%',
+          }}>
+            <h1 style={{ 
+              color: 'white', textAlign: 'center', fontSize: '5rem',
+              textShadow: '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000',
+              margin: 0
             }}>
-                <h1 className="text" style={{ 
-                    textAlign: 'center', fontSize: '5rem',
-                    textShadow: '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000, 7px 7px 10px rgba(0,0,0,0.7)',
-                }}>
-                    "{currentContent.message}"
-                </h1>
-            </div>
+              "{currentContent.message}"
+            </h1>
+          </div>
         )}
         
-        <div className="footer" style={{
-            position: 'absolute', bottom: '2rem', left: '2rem',
-            right: '2rem', width: 'calc(100% - 4rem)',
-            display: 'flex', justifyContent: 'space-between',
-            alignItems: 'flex-end', pointerEvents: 'auto',
+        <div style={{
+          position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end'
         }}>
-            <div>
-              {currentContent && (
-                <div style={{ 
-                  display: 'flex', flexDirection: 'column', 
-                  alignItems: 'flex-start', backgroundColor: 'rgba(0,0,0,0.5)',
-                  padding: '20px 25px', borderRadius: '10px'
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '25px' }}>
-                    <SocialIcon type={currentContent.socialType} />
-                    <p style={{ fontSize: '2.5rem', margin: 0 }}>{currentContent.name}</p>
-                  </div>
-                  <p style={{ fontSize: '2.5rem', margin: 0, marginTop: '10px' }}>โต๊ะ: {currentContent.tableNumber}</p>
+          <div>
+            {currentContent && (
+              <div style={{ 
+                display: 'flex', flexDirection: 'column', 
+                backgroundColor: 'rgba(0,0,0,0.5)',
+                padding: '20px 25px', borderRadius: '10px'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '25px' }}>
+                  <SocialIcon type={currentContent.socialType} />
+                  <p style={{ fontSize: '2.5rem', margin: 0, color: 'white' }}>
+                    {currentContent.name}
+                  </p>
                 </div>
-              )}
-            </div>
-            
-            <div style={{ 
-              backgroundColor: 'white',
-              padding: '10px', borderRadius: '10px'
-            }}>
-                {uploadUrl && <QRCode value={uploadUrl} size={160} />}
-            </div>
+                <p style={{ fontSize: '2.5rem', margin: '10px 0 0 0', color: 'white' }}>
+                  โต๊ะ: {currentContent.tableNumber}
+                </p>
+              </div>
+            )}
+          </div>
+          
+          <div style={{ 
+            backgroundColor: 'white', padding: '10px', borderRadius: '10px'
+          }}>
+            {uploadUrl && <QRCode value={uploadUrl} size={160} />}
+          </div>
         </div>
       </div>
     </div>
