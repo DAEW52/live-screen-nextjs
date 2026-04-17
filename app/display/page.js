@@ -68,7 +68,7 @@ export default function DisplayPage() {
   const [isIdle, setIsIdle] = useState(true);
   const [countdown, setCountdown] = useState(0);
   const [imageSlots, setImageSlots] = useState([
-    { src: null, visible: false }, 
+    { src: null, visible: false },
     { src: null, visible: false }
   ]);
   const [activeSlot, setActiveSlot] = useState(0);
@@ -78,7 +78,7 @@ export default function DisplayPage() {
     newItemsQueue: [],
     currentIndex: -1,
     ids: new Set(),
-    lastIndexBeforeQueue: null, // --- ✨ เพิ่มตัวแปรสำหรับ "จดจำ" ตำแหน่ง ✨ ---
+    lastIndexBeforeQueue: null,
   });
 
   const activeSlotRef = useRef(activeSlot);
@@ -86,8 +86,59 @@ export default function DisplayPage() {
     activeSlotRef.current = activeSlot;
   }, [activeSlot]);
 
+  // --- แยก tick ออกมาเป็น useCallback เพื่อเรียกใช้ซ้ำได้ ---
+  const tick = useCallback(() => {
+    const data = dataRef.current;
+    let nextItem = null;
+
+    if (data.newItemsQueue.length > 0) {
+      // มีรูปใหม่ใน queue → จำ index ปัจจุบันไว้ก่อน แล้วเล่น queue
+      data.lastIndexBeforeQueue = data.currentIndex;
+      nextItem = data.newItemsQueue.shift();
+      const itemIndex = data.approvedList.findIndex(item => item.id === nextItem.id);
+      if (itemIndex !== -1) {
+        data.currentIndex = itemIndex;
+      }
+    } else if (data.approvedList.length > 0) {
+      let nextIndex;
+      if (data.lastIndexBeforeQueue !== null) {
+        // เพิ่งเล่น queue จบ → กลับไปต่อจากตำแหน่งที่จำไว้
+        // ✅ FIX: validate ว่า index ยังอยู่ใน range หลังจากอาจมีการลบรูป
+        const safeLastIndex = Math.min(
+          data.lastIndexBeforeQueue,
+          data.approvedList.length - 1
+        );
+        nextIndex = (safeLastIndex + 1) % data.approvedList.length;
+        data.lastIndexBeforeQueue = null; // เคลียร์ความจำ
+      } else {
+        // เล่นตามลำดับปกติ
+        nextIndex = (data.currentIndex + 1) % data.approvedList.length;
+      }
+      data.currentIndex = nextIndex;
+      nextItem = data.approvedList[data.currentIndex];
+    }
+
+    if (nextItem) {
+      const currentActiveSlot = activeSlotRef.current;
+      const nextSlot = (currentActiveSlot + 1) % 2;
+      setImageSlots(prev => {
+        const newSlots = [...prev];
+        newSlots[nextSlot] = { src: nextItem.imageUrl, visible: true };
+        newSlots[currentActiveSlot] = { ...newSlots[currentActiveSlot], visible: false };
+        return newSlots;
+      });
+      setActiveSlot(nextSlot);
+      setCurrentContent(nextItem);
+      setIsIdle(false);
+    } else {
+      setIsIdle(true);
+      setCurrentContent(null);
+    }
+  }, []);
+
   useEffect(() => {
     setUploadUrl(window.location.origin);
+
     const fetchInitialData = async () => {
       const { data } = await supabase
         .from('submissions')
@@ -99,11 +150,13 @@ export default function DisplayPage() {
         slideData.approvedList = data;
         slideData.ids = new Set(data.map(item => item.id));
       }
+      // ✅ FIX: เรียก tick() ทันทีหลัง fetch เสร็จ ไม่ต้องรอ 15 วิแรก
+      tick();
     };
     fetchInitialData();
-    
+
     const channel = supabase.channel('realtime display')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, 
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' },
         (payload) => {
           const data = dataRef.current;
           if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
@@ -115,66 +168,27 @@ export default function DisplayPage() {
           } else if (payload.eventType === 'DELETE') {
             const deletedId = payload.old.id;
             if (data.ids.has(deletedId)) {
-                data.ids.delete(deletedId);
-                data.approvedList = data.approvedList.filter(item => item.id !== deletedId);
-                data.newItemsQueue = data.newItemsQueue.filter(item => item.id !== deletedId);
+              data.ids.delete(deletedId);
+              data.approvedList = data.approvedList.filter(item => item.id !== deletedId);
+              data.newItemsQueue = data.newItemsQueue.filter(item => item.id !== deletedId);
+              // ✅ FIX: ถ้าลบรูปที่กำลังโชว์อยู่ → reset lastIndexBeforeQueue ด้วย
+              if (data.lastIndexBeforeQueue !== null && data.lastIndexBeforeQueue >= data.approvedList.length) {
+                data.lastIndexBeforeQueue = data.approvedList.length - 1;
+              }
             }
           }
         }
       ).subscribe();
+
     return () => supabase.removeChannel(channel);
-  }, []);
+  }, [tick]);
 
   useEffect(() => {
     const DELAY = 15000;
-    const tick = () => {
-      const data = dataRef.current;
-      let nextItem = null;
-
-      if (data.newItemsQueue.length > 0) {
-        // --- ✨ 1. เมื่อมีรูปใหม่ ให้ "จดจำ" ตำแหน่งปัจจุบันไว้ก่อน ✨ ---
-        data.lastIndexBeforeQueue = data.currentIndex;
-        nextItem = data.newItemsQueue.shift();
-        const itemIndex = data.approvedList.findIndex(item => item.id === nextItem.id);
-        if (itemIndex !== -1) {
-          data.currentIndex = itemIndex;
-        }
-      } else if (data.approvedList.length > 0) {
-        let nextIndex;
-        // --- ✨ 2. ตรวจสอบว่าเราเพิ่งเล่นรูปจากคิวด่วนจบไปหรือไม่ ✨ ---
-        if (data.lastIndexBeforeQueue !== null) {
-          // ถ้าใช่ ให้กลับไปเล่นต่อจากตำแหน่งที่จำไว้
-          nextIndex = (data.lastIndexBeforeQueue + 1) % data.approvedList.length;
-          data.lastIndexBeforeQueue = null; // เคลียร์ความจำ
-        } else {
-          // ถ้าไม่ใช่ ก็เล่นตามลำดับปกติ
-          nextIndex = (data.currentIndex + 1) % data.approvedList.length;
-        }
-        data.currentIndex = nextIndex;
-        nextItem = data.approvedList[data.currentIndex];
-      }
-
-      if (nextItem) {
-        const currentActiveSlot = activeSlotRef.current;
-        const nextSlot = (currentActiveSlot + 1) % 2;
-        setImageSlots(prev => {
-            const newSlots = [...prev];
-            newSlots[nextSlot] = { src: nextItem.imageUrl, visible: true };
-            newSlots[currentActiveSlot] = { ...newSlots[currentActiveSlot], visible: false };
-            return newSlots;
-        });
-        setActiveSlot(nextSlot);
-        setCurrentContent(nextItem);
-        setIsIdle(false);
-      } else {
-        setIsIdle(true);
-        setCurrentContent(null);
-      }
-    };
-    
+    // ✅ FIX: ไม่ต้องเรียก tick() ใน interval ตัวแรกทันที เพราะ fetchInitialData() เรียกไปแล้ว
     const timerId = setInterval(tick, DELAY);
     return () => clearInterval(timerId);
-  }, []);
+  }, [tick]);
 
   useEffect(() => {
     if (!currentContent) return;
@@ -186,9 +200,9 @@ export default function DisplayPage() {
   }, [currentContent]);
 
   return (
-    <div className="stage" style={{ 
-      position: 'relative', width: '100vw', height: '100vh', 
-      overflow: 'hidden', backgroundColor: 'black' 
+    <div className="stage" style={{
+      position: 'relative', width: '100vw', height: '100vh',
+      overflow: 'hidden', backgroundColor: 'black'
     }}>
       <style>{`
         .image-slot {
@@ -224,35 +238,35 @@ export default function DisplayPage() {
           {slot.src && <img src={slot.src} alt={`display-slot-${index}`} />}
         </div>
       ))}
-      
+
       <div key={currentContent?.id} className={`content-overlay ${currentContent ? 'visible' : ''}`}>
         {isIdle && (
           <div style={{
-            width: '100%', height: '100%', display: 'flex', 
+            width: '100%', height: '100%', display: 'flex',
             justifyContent: 'center', alignItems: 'center'
           }}>
             <h1 style={{ color: 'white', fontSize: '6rem' }}>THER Phuket</h1>
           </div>
         )}
-        
+
         {currentContent && (
           <div style={{
-            position: 'absolute', top: '2rem', right: '2rem', 
-            backgroundColor: 'rgba(0, 0, 0, 0.7)', color: 'white', 
-            width: '50px', height: '50px', borderRadius: '50%', 
-            display: 'flex', alignItems: 'center', justifyContent: 'center', 
+            position: 'absolute', top: '2rem', right: '2rem',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)', color: 'white',
+            width: '50px', height: '50px', borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: '1.5rem', fontWeight: 'bold', border: '2px solid white'
           }}>
             {countdown}
           </div>
         )}
-        
+
         {currentContent && (
           <div style={{
             position: 'absolute', top: '70%', left: '50%',
             transform: 'translate(-50%, -50%)', width: '90%',
           }}>
-            <h1 style={{ 
+            <h1 style={{
               color: 'white', textAlign: 'center', fontSize: '5rem',
               textShadow: '-4px -4px 0 #000, 4px -4px 0 #000, -4px 4px 0 #000, 4px 4px 0 #000',
               margin: 0
@@ -261,15 +275,15 @@ export default function DisplayPage() {
             </h1>
           </div>
         )}
-        
+
         <div style={{
           position: 'absolute', bottom: '2rem', left: '2rem', right: '2rem',
           display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end'
         }}>
           <div>
             {currentContent && (
-              <div style={{ 
-                display: 'flex', flexDirection: 'column', 
+              <div style={{
+                display: 'flex', flexDirection: 'column',
                 backgroundColor: 'rgba(0,0,0,0.5)',
                 padding: '20px 25px', borderRadius: '10px'
               }}>
@@ -285,8 +299,8 @@ export default function DisplayPage() {
               </div>
             )}
           </div>
-          
-          <div style={{ 
+
+          <div style={{
             backgroundColor: 'white', padding: '10px', borderRadius: '10px'
           }}>
             {uploadUrl && <QRCode value={uploadUrl} size={160} />}
@@ -296,4 +310,3 @@ export default function DisplayPage() {
     </div>
   );
 }
-
