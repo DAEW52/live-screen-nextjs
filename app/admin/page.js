@@ -2,175 +2,232 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
-import { Trash2, Check, X, Zap, Edit3, MessageSquare } from 'lucide-react';
+import { 
+  CheckCircle2, XCircle, Zap, Clock, Image as ImageIcon, 
+  Trash2, RefreshCcw, Monitor, Maximize2, Loader2, X
+} from 'lucide-react';
 
 // --- ฟังก์ชันแสดงไอคอนโซเชียล ---
 const SocialIcon = ({ type }) => {
   const socialType = type?.toLowerCase();
-  
   const getConfig = () => {
     if (socialType === 'facebook') return { color: '#1877F2', label: 'FB' };
     if (socialType === 'instagram') return { color: '#E4405F', label: 'IG' };
     if (socialType === 'line') return { color: '#06C755', label: 'LINE' };
-    return { color: '#94a3b8', label: '??' };
+    return { color: '#64748b', label: '??' };
   };
-
   const config = getConfig();
-
   return (
     <span style={{ 
-      display: 'inline-flex', 
-      alignItems: 'center', 
-      padding: '2px 8px', 
-      borderRadius: '4px', 
-      fontSize: '0.75rem', 
-      fontWeight: 'bold', 
-      backgroundColor: config.color, 
-      color: 'white',
-      marginLeft: '8px'
+      display: 'inline-flex', alignItems: 'center', padding: '2px 8px', 
+      borderRadius: '6px', fontSize: '0.7rem', fontWeight: 'bold', 
+      backgroundColor: config.color, color: 'white', marginLeft: '8px' 
     }}>
       {config.label}
     </span>
   );
 };
 
-export default function AdminPage() {
-  const [pending, setPending] = useState([]);
-  const [approved, setApproved] = useState([]);
+export default function SuperAdmin() {
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState('pending'); 
+  const [previewUrl, setPreviewUrl] = useState(null);
 
-  const fetchSubmissions = async () => {
-    const { data, error } = await supabase
+  // 1. ดึงข้อมูลและตั้งค่า Realtime
+  const fetchData = async () => {
+    const { data: res, error } = await supabase
       .from('submissions')
       .select('*')
       .order('created_at', { ascending: false });
-
-    if (!error && data) {
-      setPending(data.filter((item) => item.status === 'pending'));
-      setApproved(data.filter((item) => item.status === 'approved'));
-    }
+    
+    if (!error && res) setData(res);
     setLoading(false);
   };
 
   useEffect(() => {
-    fetchSubmissions();
-    const channel = supabase.channel('admin-realtime-v4')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, () => fetchSubmissions())
+    fetchData();
+    const channel = supabase.channel('super_admin_final')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' }, () => fetchData())
       .subscribe();
     return () => supabase.removeChannel(channel);
   }, []);
 
+  // 2. ฟังก์ชันจัดการสถานะ (อนุมัติ / ปฏิเสธ)
+  const handleAction = async (id, status) => {
+    const { error } = await supabase
+      .from('submissions')
+      .update({ status: status })
+      .eq('id', id);
+    
+    if (error) {
+      console.error("Update failed:", error.message);
+      // Fallback API if direct update fails
+      await fetch(`/api/${status === 'approved' ? 'approve' : 'reject'}/${id}`, { method: 'POST' });
+    }
+  };
+
+  // 3. ฟังก์ชันรัดคิว (Push to Front)
+  const pushNext = async (id) => {
+    await supabase.from('submissions')
+      .update({ created_at: new Date().toISOString() })
+      .eq('id', id);
+    alert("⚡ ดันขึ้นคิวถัดไปบนหน้าจอเรียบร้อย!");
+  };
+
+  // 4. ฟังก์ชันลบถาวร (Delete from DB)
+  const deletePermanent = async (id) => {
+    if (confirm("⚠️ ต้องการลบรูปนี้ออกจากฐานข้อมูลถาวรใช่หรือไม่?")) {
+      await supabase.from('submissions').delete().eq('id', id);
+    }
+  };
+
+  // 5. ฟังก์ชันแก้ไขข้อความ (Sync กับหน้าจอ)
   const handleUpdateMessage = async (id, newMessage) => {
     await supabase.from('submissions').update({ message: newMessage }).eq('id', id);
   };
 
-  const handlePushToFront = async (id) => {
-    const { error } = await supabase
-      .from('submissions')
-      .update({ created_at: new Date().toISOString() })
-      .eq('id', id);
-    if (!error) alert('⚡ รัดคิวเรียบร้อย! รูปนี้จะแสดงลำดับถัดไป');
-  };
+  const filtered = data.filter(item => item.status === tab);
 
-  const handleAction = async (id, action) => {
-    const status = action === 'approve' ? 'approved' : 'rejected';
-    const { error } = await supabase.from('submissions').update({ status }).eq('id', id);
-    if (error) await fetch(`/api/${action}/${id}`, { method: 'POST' });
-    fetchSubmissions();
-  };
-
-  if (loading) return <div style={{ background: '#0f172a', height: '100vh', color: 'white', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading Admin Control...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-[#0a0f1c] flex flex-col items-center justify-center text-white">
+      <Loader2 className="animate-spin mb-4" size={48} />
+      <p>THER PHUKET SYSTEM STARTING...</p>
+    </div>
+  );
 
   return (
-    <div className="admin-wrapper">
+    <div className="min-h-screen bg-[#0a0f1c] text-slate-200 p-4 md:p-8 font-sans">
       <style>{`
-        .admin-wrapper { background: #0f172a; min-height: 100vh; color: #e5e7eb; padding: 2rem; font-family: sans-serif; }
-        .container { max-width: 1400px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; border-bottom: 1px solid #334155; padding-bottom: 1rem; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 1.5rem; }
-        .card { background: #1e293b; border-radius: 16px; overflow: hidden; border: 1px solid #334155; display: flex; flex-direction: column; }
-        .img-box { height: 240px; width: 100%; cursor: pointer; }
-        .img-box img { width: 100%; height: 100%; object-fit: cover; }
-        .info { padding: 1.25rem; flex-grow: 1; }
-        .edit-input { background: #0f172a; border: 1px solid #3b82f6; color: white; width: 100%; padding: 10px; border-radius: 10px; margin-bottom: 12px; font-size: 0.9rem; outline: none; }
-        .meta { font-size: 0.9rem; color: #94a3b8; display: flex; flex-direction: column; gap: 4px; }
-        .actions { padding: 0 1.25rem 1.25rem; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .btn { border: none; padding: 10px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; font-weight: bold; transition: 0.2s; }
-        .btn:active { transform: scale(0.95); }
-        .btn-approve { background: #10b981; color: white; }
-        .btn-reject { background: #ef4444; color: white; }
-        .btn-zap { background: #f59e0b; color: white; grid-column: span 2; }
-        .btn-remove { background: #475569; color: white; grid-column: span 2; }
-        .section-title { margin: 2rem 0 1rem; font-size: 1.5rem; display: flex; align-items: center; gap: 12px; }
+        .glass { background: rgba(30, 41, 59, 0.6); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.1); }
+        .tab-active { background: #3b82f6; color: white; box-shadow: 0 0 20px rgba(59, 130, 246, 0.4); }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-5px); border-color: #3b82f6; background: rgba(30, 41, 59, 0.9); }
+        
+        /* ✅ ปรับพรีวิวรูปให้พอดีสายตา */
+        .modal-overlay { 
+          position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
+          z-index: 10000; display: flex; align-items: center; justify-content: center; 
+          backdrop-filter: blur(8px); padding: 40px; cursor: zoom-out;
+        }
+        .modal-content {
+          max-width: 85%; max-height: 85vh; border-radius: 20px;
+          border: 4px solid rgba(255,255,255,0.1); box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);
+          object-fit: contain; animation: zoomIn 0.2s ease-out;
+        }
+        @keyframes zoomIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
       `}</style>
 
-      <div className="container">
-        <div className="header">
-          <h1 style={{ fontSize: '1.8rem' }}>THER Phuket Admin Control</h1>
-          <div style={{ fontSize: '0.9rem', color: '#94a3b8' }}>Realtime Sync Active</div>
-        </div>
+      <div className="max-w-7xl mx-auto">
+        {/* --- Header --- */}
+        <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 gap-6">
+          <div>
+            <h1 className="text-4xl font-black bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
+              THER PHUKET <span className="text-white">CONTROL</span>
+            </h1>
+            <p className="text-slate-400 mt-1 flex items-center gap-2 text-sm">
+              <Monitor size={16} className="text-emerald-400" /> แผงควบคุมระบบ Live Screen อัจฉริยะ
+            </p>
+          </div>
 
-        {/* --- ส่วนที่ 1: รออนุมัติ --- */}
-        <h2 className="section-title" style={{ color: '#f59e0b' }}>⏳ รายการรอตรวจ ({pending.length})</h2>
-        <div className="grid">
-          {pending.map((item) => (
-            <div key={item.id} className="card">
-              <div className="img-box"><img src={item.imageUrl} alt="" /></div>
-              <div className="info">
-                <input 
-                  className="edit-input" 
-                  defaultValue={item.message} 
-                  onBlur={(e) => handleUpdateMessage(item.id, e.target.value)}
-                  placeholder="คลิกเพื่อแก้ข้อความ..."
-                />
-                <div className="meta">
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <strong>โต๊ะ {item.tableNumber}</strong>
+          <div className="glass p-1.5 rounded-2xl flex gap-1">
+            <button onClick={() => setTab('pending')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition ${tab === 'pending' ? 'tab-active' : 'hover:bg-white/5'}`}>
+              รอตรวจ ({data.filter(i=>i.status==='pending').length})
+            </button>
+            <button onClick={() => setTab('approved')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition ${tab === 'approved' ? 'tab-active' : 'hover:bg-white/5'}`}>
+              บนหน้าจอ ({data.filter(i=>i.status==='approved').length})
+            </button>
+            <button onClick={() => setTab('rejected')} className={`px-5 py-2.5 rounded-xl text-sm font-bold transition ${tab === 'rejected' ? 'tab-active' : 'hover:bg-white/5'}`}>
+              ถังขยะ ({data.filter(i=>i.status==='rejected').length})
+            </button>
+          </div>
+        </header>
+
+        {/* --- Grid Content --- */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filtered.map((item) => (
+            <div key={item.id} className="glass rounded-[1.5rem] overflow-hidden card-hover flex flex-col border border-white/5">
+              <div className="relative group aspect-[4/3] overflow-hidden cursor-zoom-in" onClick={() => setPreviewUrl(item.imageUrl)}>
+                <img src={item.imageUrl} className="w-full h-full object-cover" alt="" />
+                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white">
+                  <Maximize2 size={32} />
+                </div>
+                {item.status === 'approved' && (
+                  <div className="absolute top-4 left-4 flex items-center gap-2 px-3 py-1 bg-emerald-500 text-[10px] font-black rounded-full text-white animate-pulse">
+                    ON AIR
+                  </div>
+                )}
+              </div>
+
+              <div className="p-5 flex-grow">
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex items-center">
+                    <span className="text-blue-400 font-black">โต๊ะ {item.tableNumber}</span>
                     <SocialIcon type={item.socialType} />
                   </div>
-                  <div>ผู้ส่ง: {item.name}</div>
                 </div>
-              </div>
-              <div className="actions">
-                <button className="btn btn-reject" onClick={() => handleAction(item.id, 'reject')}><X size={18}/> ข้าม</button>
-                <button className="btn btn-approve" onClick={() => handleAction(item.id, 'approve')}><Check size={18}/> อนุมัติ</button>
-              </div>
-            </div>
-          ))}
-        </div>
 
-        {/* --- ส่วนที่ 2: บนหน้าจอ --- */}
-        <h2 className="section-title" style={{ color: '#10b981', marginTop: '4rem' }}>📺 แสดงบนจอ ({approved.length})</h2>
-        <div className="grid">
-          {approved.map((item) => (
-            <div key={item.id} className="card" style={{ borderTop: '4px solid #10b981' }}>
-              <div className="img-box"><img src={item.imageUrl} alt="" /></div>
-              <div className="info">
-                <input 
-                  className="edit-input" 
-                  defaultValue={item.message} 
+                <textarea 
+                  defaultValue={item.message}
                   onBlur={(e) => handleUpdateMessage(item.id, e.target.value)}
+                  className="w-full bg-black/30 border border-slate-700/50 rounded-xl p-3 text-sm text-slate-200 focus:border-blue-500 outline-none h-20 mb-4 transition"
+                  placeholder="พิมพ์ข้อความที่ต้องการโชว์บนจอ..."
                 />
-                <div className="meta">
-                  <div style={{ display: 'flex', alignItems: 'center' }}>
-                    <strong>โต๊ะ {item.tableNumber}</strong>
-                    <SocialIcon type={item.socialType} />
-                  </div>
-                  <div>ผู้ส่ง: {item.name}</div>
+
+                <div className="flex gap-2">
+                  {tab === 'pending' && (
+                    <>
+                      <button onClick={() => handleAction(item.id, 'rejected')} className="flex-1 py-3 rounded-xl bg-slate-800 text-rose-400 hover:bg-rose-600 hover:text-white transition font-bold text-xs flex items-center justify-center gap-2">
+                        <XCircle size={16} /> ข้าม
+                      </button>
+                      <button onClick={() => handleAction(item.id, 'approved')} className="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white transition font-bold text-xs flex items-center justify-center gap-2">
+                        <CheckCircle2 size={16} /> อนุมัติ
+                      </button>
+                    </>
+                  )}
+
+                  {tab === 'approved' && (
+                    <>
+                      <button onClick={() => pushNext(item.id)} className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-white transition font-bold text-xs flex items-center justify-center gap-2">
+                        <Zap size={16} fill="currentColor" /> รัดคิว
+                      </button>
+                      <button onClick={() => handleAction(item.id, 'rejected')} className="p-3 rounded-xl bg-slate-800 hover:bg-rose-600 transition text-slate-400 hover:text-white border border-slate-700">
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
+
+                  {tab === 'rejected' && (
+                    <>
+                      <button onClick={() => handleAction(item.id, 'pending')} className="flex-1 py-3 rounded-xl border border-blue-500/30 text-blue-400 hover:bg-blue-600 hover:text-white transition font-bold text-xs flex items-center justify-center gap-2">
+                        <RefreshCcw size={16} /> กู้คืน
+                      </button>
+                      <button onClick={() => deletePermanent(item.id)} className="p-3 rounded-xl bg-rose-900/20 text-rose-500 hover:bg-rose-600 hover:text-white transition border border-rose-500/20">
+                        <Trash2 size={16} />
+                      </button>
+                    </>
+                  )}
                 </div>
-              </div>
-              <div className="actions">
-                <button className="btn btn-zap" onClick={() => handlePushToFront(item.id)}>
-                  <Zap size={18} fill="white"/> รัดคิวให้โชว์รูปถัดไป
-                </button>
-                <button className="btn btn-remove" onClick={() => handleAction(item.id, 'reject')}>
-                  นำออกจากจอ
-                </button>
               </div>
             </div>
           ))}
         </div>
       </div>
+
+      {/* --- ✅ หน้าต่างพรีวิวรูปใหญ่ (ขนาดพอดี) --- */}
+      {previewUrl && (
+        <div className="modal-overlay" onClick={() => setPreviewUrl(null)}>
+          <button className="absolute top-10 right-10 text-white/50 hover:text-white transition">
+            <X size={40} />
+          </button>
+          <img 
+            src={previewUrl} 
+            className="modal-content" 
+            alt="Preview" 
+            onClick={(e) => e.stopPropagation()} 
+          />
+        </div>
+      )}
     </div>
   );
 }
