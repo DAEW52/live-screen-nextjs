@@ -86,32 +86,29 @@ export default function DisplayPage() {
     activeSlotRef.current = activeSlot;
   }, [activeSlot]);
 
-  // --- แยก tick ออกมาเป็น useCallback เพื่อเรียกใช้ซ้ำได้ ---
+  // ✅ TICK FUNCTION: ปรับปรุงให้ดึงคิวใหม่มาแสดงทันที
   const tick = useCallback(() => {
     const data = dataRef.current;
     let nextItem = null;
 
     if (data.newItemsQueue.length > 0) {
-      // มีรูปใหม่ใน queue → จำ index ปัจจุบันไว้ก่อน แล้วเล่น queue
-      data.lastIndexBeforeQueue = data.currentIndex;
+      // มีรูปใหม่ในคิว → เล่นคิวทันที
+      if (data.lastIndexBeforeQueue === null) {
+        data.lastIndexBeforeQueue = data.currentIndex;
+      }
       nextItem = data.newItemsQueue.shift();
       const itemIndex = data.approvedList.findIndex(item => item.id === nextItem.id);
       if (itemIndex !== -1) {
         data.currentIndex = itemIndex;
       }
     } else if (data.approvedList.length > 0) {
+      // เล่นวนลูปปกติ
       let nextIndex;
       if (data.lastIndexBeforeQueue !== null) {
-        // เพิ่งเล่น queue จบ → กลับไปต่อจากตำแหน่งที่จำไว้
-        // ✅ FIX: validate ว่า index ยังอยู่ใน range หลังจากอาจมีการลบรูป
-        const safeLastIndex = Math.min(
-          data.lastIndexBeforeQueue,
-          data.approvedList.length - 1
-        );
+        const safeLastIndex = Math.min(data.lastIndexBeforeQueue, data.approvedList.length - 1);
         nextIndex = (safeLastIndex + 1) % data.approvedList.length;
-        data.lastIndexBeforeQueue = null; // เคลียร์ความจำ
+        data.lastIndexBeforeQueue = null;
       } else {
-        // เล่นตามลำดับปกติ
         nextIndex = (data.currentIndex + 1) % data.approvedList.length;
       }
       data.currentIndex = nextIndex;
@@ -136,6 +133,7 @@ export default function DisplayPage() {
     }
   }, []);
 
+  // ✅ REALTIME LISTENER: แก้ให้เด้งทันทีเมื่อรูปใหม่มา
   useEffect(() => {
     setUploadUrl(window.location.origin);
 
@@ -149,13 +147,12 @@ export default function DisplayPage() {
         const slideData = dataRef.current;
         slideData.approvedList = data;
         slideData.ids = new Set(data.map(item => item.id));
+        tick(); // โชว์รูปแรกทันทีถ้ามีข้อมูล
       }
-      // ✅ FIX: เรียก tick() ทันทีหลัง fetch เสร็จ ไม่ต้องรอ 15 วิแรก
-      tick();
     };
     fetchInitialData();
 
-    const channel = supabase.channel('realtime display')
+    const channel = supabase.channel('realtime-display-sync')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'submissions' },
         (payload) => {
           const data = dataRef.current;
@@ -164,18 +161,16 @@ export default function DisplayPage() {
               data.ids.add(payload.new.id);
               data.approvedList.push(payload.new);
               data.newItemsQueue.push(payload.new);
+              
+              // ✨ ถ้าหน้าจอกำลังว่าง (Idle) ให้รันรูปใหม่ขึ้นมาทันที ✨
+              // หรือถ้าอยากให้ลัดคิวทันทีไม่ว่าจะโชว์รูปอะไรอยู่ ให้เรียก tick() ตรงนี้ได้เลย
+              tick(); 
             }
           } else if (payload.eventType === 'DELETE') {
             const deletedId = payload.old.id;
-            if (data.ids.has(deletedId)) {
-              data.ids.delete(deletedId);
-              data.approvedList = data.approvedList.filter(item => item.id !== deletedId);
-              data.newItemsQueue = data.newItemsQueue.filter(item => item.id !== deletedId);
-              // ✅ FIX: ถ้าลบรูปที่กำลังโชว์อยู่ → reset lastIndexBeforeQueue ด้วย
-              if (data.lastIndexBeforeQueue !== null && data.lastIndexBeforeQueue >= data.approvedList.length) {
-                data.lastIndexBeforeQueue = data.approvedList.length - 1;
-              }
-            }
+            data.ids.delete(deletedId);
+            data.approvedList = data.approvedList.filter(item => item.id !== deletedId);
+            data.newItemsQueue = data.newItemsQueue.filter(item => item.id !== deletedId);
           }
         }
       ).subscribe();
@@ -185,7 +180,6 @@ export default function DisplayPage() {
 
   useEffect(() => {
     const DELAY = 15000;
-    // ✅ FIX: ไม่ต้องเรียก tick() ใน interval ตัวแรกทันที เพราะ fetchInitialData() เรียกไปแล้ว
     const timerId = setInterval(tick, DELAY);
     return () => clearInterval(timerId);
   }, [tick]);
@@ -239,7 +233,7 @@ export default function DisplayPage() {
         </div>
       ))}
 
-      <div key={currentContent?.id} className={`content-overlay ${currentContent ? 'visible' : ''}`}>
+      <div className={`content-overlay ${currentContent || isIdle ? 'visible' : ''}`}>
         {isIdle && (
           <div style={{
             width: '100%', height: '100%', display: 'flex',
@@ -255,7 +249,8 @@ export default function DisplayPage() {
             backgroundColor: 'rgba(0, 0, 0, 0.7)', color: 'white',
             width: '50px', height: '50px', borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: '1.5rem', fontWeight: 'bold', border: '2px solid white'
+            fontSize: '1.5rem', fontWeight: 'bold', border: '2px solid white',
+            zIndex: 100
           }}>
             {countdown}
           </div>
