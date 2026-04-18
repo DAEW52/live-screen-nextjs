@@ -34,7 +34,7 @@ export default function SuperAdmin() {
   const [tab, setTab] = useState('pending'); 
   const [previewUrl, setPreviewUrl] = useState(null);
 
-  // 1. ดึงข้อมูลและตั้งค่า Realtime
+  // 1. ดึงข้อมูล
   const fetchData = async () => {
     const { data: res, error } = await supabase
       .from('submissions')
@@ -53,17 +53,28 @@ export default function SuperAdmin() {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // 2. ฟังก์ชันจัดการสถานะ (อนุมัติ / ปฏิเสธ)
+  // 2. ฟังก์ชันจัดการสถานะ (อนุมัติ / ปฏิเสธ) - แก้ไขให้เรียกผ่าน API
   const handleAction = async (id, status) => {
-    const { error } = await supabase
-      .from('submissions')
-      .update({ status: status })
-      .eq('id', id);
-    
-    if (error) {
-      console.error("Update failed:", error.message);
-      // Fallback API if direct update fails
-      await fetch(`/api/${status === 'approved' ? 'approve' : 'reject'}/${id}`, { method: 'POST' });
+    try {
+      const apiPath = status === 'approved' ? 'approve' : 'reject';
+      // ถ้าเป็น status 'pending' (กู้คืน) ให้ใช้ path reject แต่ส่ง status ไปจัดการ หรือสร้าง API เพิ่ม
+      // ในที่นี้ขอปรับให้เรียกตรงตามสถานะ
+      const targetPath = status === 'pending' ? 'reject' : apiPath; 
+      
+      const response = await fetch(`/api/${targetPath}/${id}`, { 
+        method: 'POST',
+        // ส่ง status ไปด้วยถ้า API ของคุณรองรับการรับ Body
+        body: JSON.stringify({ status: status }) 
+      });
+      
+      if (!response.ok) {
+        const err = await response.json();
+        alert("อัปเดตไม่สำเร็จ: " + err.error);
+      } else {
+        fetchData(); 
+      }
+    } catch (err) {
+      console.error("Update Error:", err);
     }
   };
 
@@ -75,14 +86,25 @@ export default function SuperAdmin() {
     alert("⚡ ดันขึ้นคิวถัดไปบนหน้าจอเรียบร้อย!");
   };
 
-  // 4. ฟังก์ชันลบถาวร (Delete from DB)
+  // 4. ฟังก์ชันลบถาวร - แก้ไขให้เรียกผ่าน API เพื่อข้าม RLS
   const deletePermanent = async (id) => {
     if (confirm("⚠️ ต้องการลบรูปนี้ออกจากฐานข้อมูลถาวรใช่หรือไม่?")) {
-      await supabase.from('submissions').delete().eq('id', id);
+      try {
+        const response = await fetch(`/api/delete/${id}`, { method: 'DELETE' });
+        if (response.ok) {
+          alert("ลบข้อมูลสำเร็จ!");
+          fetchData(); 
+        } else {
+          const err = await response.json();
+          alert("ลบไม่สำเร็จ: " + err.error);
+        }
+      } catch (err) {
+        console.error("Delete Error:", err);
+      }
     }
   };
 
-  // 5. ฟังก์ชันแก้ไขข้อความ (Sync กับหน้าจอ)
+  // 5. ฟังก์ชันแก้ไขข้อความ
   const handleUpdateMessage = async (id, newMessage) => {
     await supabase.from('submissions').update({ message: newMessage }).eq('id', id);
   };
@@ -103,8 +125,6 @@ export default function SuperAdmin() {
         .tab-active { background: #3b82f6; color: white; box-shadow: 0 0 20px rgba(59, 130, 246, 0.4); }
         .card-hover { transition: all 0.3s ease; }
         .card-hover:hover { transform: translateY(-5px); border-color: #3b82f6; background: rgba(30, 41, 59, 0.9); }
-        
-        /* ✅ ปรับพรีวิวรูปให้พอดีสายตา */
         .modal-overlay { 
           position: fixed; inset: 0; background: rgba(0,0,0,0.9); 
           z-index: 10000; display: flex; align-items: center; justify-content: center; 
@@ -119,7 +139,6 @@ export default function SuperAdmin() {
       `}</style>
 
       <div className="max-w-7xl mx-auto">
-        {/* --- Header --- */}
         <header className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-10 gap-6">
           <div>
             <h1 className="text-4xl font-black bg-gradient-to-r from-blue-400 to-emerald-400 bg-clip-text text-transparent">
@@ -143,7 +162,6 @@ export default function SuperAdmin() {
           </div>
         </header>
 
-        {/* --- Grid Content --- */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {filtered.map((item) => (
             <div key={item.id} className="glass rounded-[1.5rem] overflow-hidden card-hover flex flex-col border border-white/5">
@@ -214,7 +232,6 @@ export default function SuperAdmin() {
         </div>
       </div>
 
-      {/* --- ✅ หน้าต่างพรีวิวรูปใหญ่ (ขนาดพอดี) --- */}
       {previewUrl && (
         <div className="modal-overlay" onClick={() => setPreviewUrl(null)}>
           <button className="absolute top-10 right-10 text-white/50 hover:text-white transition">

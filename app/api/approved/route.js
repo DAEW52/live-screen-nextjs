@@ -1,17 +1,17 @@
-// app/api/approved/route.js
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { supabaseAdmin } from '@/lib/supabaseAdmin';
 
-export async function GET() {
-  const { data, error } = await supabase
-    .from('submissions')
-    .select('*')
-    .eq('status', 'approved') // ดึงเฉพาะรายการที่มีสถานะ 'approved'
-    .order('created_at', { ascending: false });
+export async function POST(request, { params }) {
+  const { id } = await params;
+  try {
+    const { error } = await supabaseAdmin
+      .from('submissions')
+      .update({ status: 'approved' })
+      .eq('id', id);
 
-  if (error) {
+    if (error) throw error;
+    return NextResponse.json({ success: true });
+  } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
-
-  return NextResponse.json(data);
 }
