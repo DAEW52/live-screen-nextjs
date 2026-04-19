@@ -1,20 +1,28 @@
-import { Kanit } from "next/font/google";
+import { Space_Grotesk, Kanit } from "next/font/google";
 import "./globals.css";
 
-const kanit = Kanit({ 
-  subsets: ["latin", "thai"],
-  weight: ['300', '400', '700', '900'] 
+const spaceGrotesk = Space_Grotesk({ 
+  subsets: ["latin"],
+  weight: ['300', '400', '500', '600', '700'],
+  variable: '--font-space' 
 });
 
-export const metadata = {
-  title: "THER Phuket • Live Screen System",
-  description: "Live Screen System by THER Phuket",
-};
+const kanit = Kanit({
+  subsets: ["thai", "latin"],
+  weight: ['300', '400', '500', '600', '700'], // เพิ่ม 600, 700 ถ้ามีใช้ตัวหนา
+  variable: '--font-kanit'
+});
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="th">
-      <body className={kanit.className}>{children}</body>
+    <html lang="th" suppressHydrationWarning> 
+      {/* แนะนำให้ใส่ที่ <html> ด้วยเพื่อครอบคลุมถึง Extension ที่แก้ Tag html ครับ */}
+      <body 
+        className={`${spaceGrotesk.variable} ${kanit.variable}`} 
+        suppressHydrationWarning
+      >
+        {children}
+      </body>
     </html>
   );
 }
