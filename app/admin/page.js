@@ -4,8 +4,9 @@ import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 import {
   CheckCircle2, XCircle, Zap, Trash2, RefreshCcw,
-  Maximize2, Loader2, X, Search, RefreshCw
+  Maximize2, Loader2, X, Search, RefreshCw, Tv, ChevronDown, LogOut
 } from 'lucide-react';
+import { sendFx, TRANSITIONS, isBirthday } from '@/lib/liveFx';
 
 // ─── Social Icon ──────────────────────────────────────────────────
 const SocialBadge = ({ type }) => {
@@ -111,10 +112,170 @@ const ImageModal = ({ url, onClose }) => {
   );
 };
 
+// ─── Live Control (คุมจอสด) ──────────────────────────────────────
+const CTRL_KEY = 'ther_admin_ctrl';
+const EFFECTS = [
+  { name: 'confetti', label: '🎉 พลุกระดาษ' },
+  { name: 'fireworks', label: '🎆 ดอกไม้ไฟ' },
+  { name: 'hearts', label: '❤️ ฝนหัวใจ' },
+  { name: 'fire', label: '🔥 ไฟลุก' },
+  { name: 'balloons', label: '🎈 ลูกโป่ง' },
+  { name: 'flash', label: '⚡ แฟลช' },
+];
+const INTERVALS = [5, 10, 15, 20, 30, 60];
+const FX_LEVELS = [
+  { id: 'off', label: '🚫 ปิด' },
+  { id: 'low', label: '🌙 เบา' },
+  { id: 'high', label: '💥 จัดเต็ม' },
+];
+
+const LiveControl = ({ showToast, hearts }) => {
+  const [open, setOpen] = useState(true);
+  const [text, setText] = useState('');
+  const [seconds, setSeconds] = useState(10);
+  const [ticker, setTicker] = useState('');
+  const [interval, setIntervalSec] = useState(15);
+  const [transition, setTransition] = useState('random');
+  const [fxLevel, setFxLevel] = useState('low');
+  const [confirmReset, setConfirmReset] = useState(false);
+
+  useEffect(() => {
+    try {
+      const c = JSON.parse(localStorage.getItem(CTRL_KEY) || '{}');
+      if (c.open !== undefined) setOpen(c.open);
+      if (c.ticker) setTicker(c.ticker);
+      if (c.interval) setIntervalSec(c.interval);
+      if (c.transition) setTransition(c.transition);
+      if (c.fxLevel) setFxLevel(c.fxLevel);
+    } catch {}
+  }, []);
+  const remember = (patch) => {
+    try { localStorage.setItem(CTRL_KEY, JSON.stringify({ open, ticker, interval, transition, fxLevel, ...patch })); } catch {}
+  };
+
+  const fire = async (type, data, okMsg) => {
+    try { await sendFx(type, data); if (okMsg) showToast(okMsg, 'success'); }
+    catch { showToast('⚠️ ส่งคำสั่งไปจอไม่สำเร็จ', 'error'); }
+  };
+
+  const announce = () => {
+    if (!text.trim()) return showToast('พิมพ์ข้อความประกาศก่อน', 'info');
+    fire('announce', { text: text.trim(), seconds }, '📢 ขึ้นประกาศแล้ว');
+  };
+  const setAsTicker = () => {
+    const t = text.trim() || ticker;
+    if (!t) return showToast('พิมพ์ข้อความก่อน', 'info');
+    setTicker(t); remember({ ticker: t });
+    fire('ticker', { text: t }, '📜 ตั้งตัววิ่งแล้ว');
+  };
+  const clearTicker = () => { setTicker(''); remember({ ticker: '' }); fire('ticker', { text: '' }, '🧹 เอาตัววิ่งออกแล้ว'); };
+  const pickInterval = (v) => { setIntervalSec(v); remember({ interval: v }); fire('settings', { interval: v }, `⏱️ เปลี่ยนเป็นรูปละ ${v} วินาที`); };
+  const pickTransition = (v) => { setTransition(v); remember({ transition: v }); fire('settings', { transition: v }, '✨ เปลี่ยนท่าเปลี่ยนรูปแล้ว'); };
+  const pickFxLevel = (v) => { setFxLevel(v); remember({ fxLevel: v }); fire('settings', { fxLevel: v }, v === 'off' ? '🚫 ปิดเอฟเฟกต์แล้ว' : v === 'low' ? '🌙 เอฟเฟกต์แบบเบา' : '💥 จัดเต็ม!'); };
+  const resetHearts = () => {
+    if (!confirmReset) { setConfirmReset(true); setTimeout(() => setConfirmReset(false), 3000); return; }
+    setConfirmReset(false);
+    fetch('/api/hearts/reset', { method: 'POST' })
+      .then(r => r.json())
+      .then(j => {
+        if (!j.ok) throw new Error(j.error);
+        fire('hearts_reset', {}, '♻️ เริ่มนับหัวใจใหม่แล้ว');
+      })
+      .catch(() => showToast('⚠️ ล้างคะแนนไม่สำเร็จ', 'error'));
+  };
+  const toggle = () => { setOpen(o => { remember({ open: !o }); return !o; }); };
+
+  return (
+    <div className={`live-ctrl ${open ? 'open' : ''}`}>
+      <button className="lc-head" onClick={toggle}>
+        <span className="lc-title"><Tv size={16} /> คุมจอสด</span>
+        <span className="lc-hint">ส่งคำสั่งไปหน้าจอ /display ทันที</span>
+        <ChevronDown size={18} className="lc-chev" />
+      </button>
+      {open && (
+        <div className="lc-body">
+          <div className="lc-section">
+            <div className="lc-label">📢 ประกาศขึ้นจอ</div>
+            <div className="lc-row">
+              <input className="lc-input" value={text} maxLength={140} placeholder="เช่น Happy Hour! ซื้อ 1 แถม 1 ถึง 4 ทุ่ม 🍻"
+                     onChange={e => setText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') announce(); }} />
+              <select className="lc-select" value={seconds} onChange={e => setSeconds(+e.target.value)}>
+                {[5, 10, 20, 30].map(v => <option key={v} value={v}>{v} วิ</option>)}
+              </select>
+              <button className="lc-btn primary" onClick={announce}>ขึ้นจอใหญ่</button>
+              <button className="lc-btn" onClick={setAsTicker}>ตั้งเป็นตัววิ่ง</button>
+            </div>
+            {ticker && (
+              <div className="lc-ticker">
+                <span className="lc-dot" /> ตัววิ่งตอนนี้: <b>{ticker}</b>
+                <button className="lc-x" onClick={clearTicker}>เอาออก ✕</button>
+              </div>
+            )}
+          </div>
+
+          <div className="lc-section">
+            <div className="lc-label">✨ เอฟเฟกต์</div>
+            <div className="lc-row wrap">
+              {FX_LEVELS.map(l => (
+                <button key={l.id} className={`lc-chip ${fxLevel === l.id ? 'on' : ''}`} onClick={() => pickFxLevel(l.id)}>{l.label}</button>
+              ))}
+            </div>
+            <div className="lc-row wrap">
+              {EFFECTS.map(e => (
+                <button key={e.name} className="lc-btn fx" onClick={() => fire('effect', { name: e.name })}>{e.label}</button>
+              ))}
+              <button className="lc-btn" onClick={() => fire('next', {}, '⏭️ ข้ามไปรูปถัดไป')}>⏭️ รูปถัดไป</button>
+            </div>
+          </div>
+
+          <div className="lc-section">
+            <div className="lc-label">❤️ รูปยอดฮิต (ลูกค้ากดหัวใจจากมือถือ)</div>
+            <div className="lc-top">
+              {hearts.top.length === 0 ? (
+                <div className="lc-top-empty">ยังไม่มีใครกดหัวใจ</div>
+              ) : hearts.top.map((t, i) => (
+                <div key={t.id} className="lc-top-row">
+                  <span className="lc-top-rank">{['🥇', '🥈', '🥉'][i] || i + 1}</span>
+                  <img src={t.imageUrl} alt="" />
+                  <span className="lc-top-name">{t.name || 'ไม่ระบุชื่อ'}{t.tableNumber ? ` · โต๊ะ ${t.tableNumber}` : ''}</span>
+                  <b>❤️ {t.count}</b>
+                </div>
+              ))}
+            </div>
+            <div className="lc-row wrap">
+              <button className="lc-btn primary" onClick={() => fire('show_top', {}, '🏆 โชว์อันดับบนจอ 12 วินาที')}>🏆 โชว์อันดับขึ้นจอ</button>
+              <button className={`lc-btn ${confirmReset ? 'danger' : ''}`} onClick={resetHearts}>{confirmReset ? 'กดอีกครั้งเพื่อยืนยัน' : '♻️ เริ่มนับใหม่'}</button>
+            </div>
+          </div>
+
+          <div className="lc-grid2">
+            <div className="lc-section">
+              <div className="lc-label">⏱️ เวลาต่อรูป</div>
+              <div className="lc-row wrap">
+                {INTERVALS.map(v => (
+                  <button key={v} className={`lc-chip ${interval === v ? 'on' : ''}`} onClick={() => pickInterval(v)}>{v} วิ</button>
+                ))}
+              </div>
+            </div>
+            <div className="lc-section">
+              <div className="lc-label">🎞️ ท่าเปลี่ยนรูป</div>
+              <div className="lc-row wrap">
+                {TRANSITIONS.map(t => (
+                  <button key={t.id} className={`lc-chip ${transition === t.id ? 'on' : ''}`} onClick={() => pickTransition(t.id)}>{t.label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ─── Card ────────────────────────────────────────────────────────
 const AUTO_SECONDS = 30; // 30 วินาที 
 
-const Card = ({ item, onAction, onPush, onDeletePermanent, onPreview, onSaveMessage }) => {
+const Card = ({ item, hearts = 0, onAction, onPush, onShowNow, onDeletePermanent, onPreview, onSaveMessage }) => {
   const [msg, setMsg] = useState(item.message || '');
   const [countdown, setCountdown] = useState(null);
   const timerRef = useRef(null);
@@ -154,12 +315,14 @@ const Card = ({ item, onAction, onPush, onDeletePermanent, onPreview, onSaveMess
         <img src={item.imageUrl} alt="" loading="lazy" />
         <div className="img-overlay"><Maximize2 size={28} color="white" /></div>
         {item.status === 'approved' && <div className="badge-onair">ON AIR</div>}
+        {hearts > 0 && <div className="badge-hearts">❤️ {hearts}</div>}
       </div>
       <div className="card-body">
         <div className="card-meta">
           <div className="card-meta-left">
             <span className="table-num">T-{item.tableNumber}</span>
             <SocialBadge type={item.socialType} />
+            {isBirthday(item.message) && <span className="hbd-badge">🎂 วันเกิด</span>}
           </div>
           <span className="time-stamp">{timeAgo(item.created_at)}</span>
         </div>
@@ -205,7 +368,8 @@ const Card = ({ item, onAction, onPush, onDeletePermanent, onPreview, onSaveMess
           )}
           {item.status === 'approved' && (
             <>
-              <button className="btn btn-push" onClick={() => onPush(item.id)}><Zap size={14} fill="currentColor" /> รัดคิว</button>
+              <button className="btn btn-show" onClick={() => onShowNow(item.id)} title="ขึ้นจอทันที"><Tv size={14} /> ขึ้นจอเลย</button>
+              <button className="btn btn-push" onClick={() => onPush(item.id)} title="เล่นเป็นรูปถัดไป"><Zap size={14} fill="currentColor" /> รัดคิว</button>
               <button className="btn btn-icon btn-trash" onClick={() => onAction(item.id, 'rejected')}><Trash2 size={15} /></button>
             </>
           )}
@@ -269,6 +433,7 @@ export default function SuperAdmin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),
       });
+      if (res.status === 401) { window.location.href = '/admin/login'; return; }
       if (!res.ok) { showToast('❌ อัปเดตไม่สำเร็จ', 'error'); fetchData(); return; }
       const labels = { approved: '✅ อนุมัติแล้ว', rejected: '🗑️ ย้ายไปถังขยะ', pending: '↩️ กู้คืนแล้ว' };
       showToast(labels[status] || 'สำเร็จ', status === 'approved' ? 'success' : 'info');
@@ -278,15 +443,38 @@ export default function SuperAdmin() {
     }
   };
 
+  // เรียก API แอดมิน (ต้องล็อกอิน) ถ้าหลุดล็อกอินให้กลับไปหน้าล็อกอิน
+  const adminUpdate = async (id, action, value) => {
+    const res = await fetch('/api/admin/update', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, action, value }) });
+    if (res.status === 401) { window.location.href = '/admin/login'; return { ok: false }; }
+    return res.json();
+  };
+  const logout = async () => {
+    await fetch('/api/admin/logout', { method: 'POST' }).catch(() => {});
+    window.location.href = '/admin/login';
+  };
+
   // Push to front
   const pushNext = async (id) => {
     const newTime = new Date().toISOString();
     setData(prev => prev.map(i => i.id === id ? { ...i, created_at: newTime } : i));
     try {
-      await supabase.from('submissions').update({ created_at: newTime }).eq('id', id);
+      const r = await adminUpdate(id, 'push');
+      if (!r.ok) throw new Error(r.error);
+      await sendFx('queue', { id });
       showToast('⚡ ดันขึ้นคิวถัดไปสำเร็จ!', 'success');
     } catch {
       showToast('⚠️ เกิดข้อผิดพลาด', 'error');
+    }
+  };
+
+  // Show now on screen
+  const showNow = async (id) => {
+    try {
+      await sendFx('show', { id });
+      showToast('📺 ขึ้นจอแล้ว!', 'success');
+    } catch {
+      showToast('⚠️ ส่งไปจอไม่สำเร็จ', 'error');
     }
   };
 
@@ -309,7 +497,9 @@ export default function SuperAdmin() {
     const item = data.find(i => i.id === id);
     if (!item || item.message === value) return;
     setData(prev => prev.map(i => i.id === id ? { ...i, message: value } : i));
-    await supabase.from('submissions').update({ message: value }).eq('id', id);
+    const r = await adminUpdate(id, 'message', value).catch(() => ({ ok: false }));
+    if (!r.ok) { showToast('⚠️ บันทึกข้อความไม่สำเร็จ', 'error'); fetchData(); return; }
+    if (r.data?.message !== value) setData(prev => prev.map(i => i.id === id ? { ...i, message: r.data.message } : i)); // คำหยาบถูกกรอง
     showToast('💾 บันทึกข้อความแล้ว', 'info');
   };
 
@@ -493,6 +683,49 @@ export default function SuperAdmin() {
         .toast-error { border-color: rgba(244,63,94,0.4); }
         .toast-info { border-color: rgba(59,130,246,0.4); }
         @keyframes slideUp { from{transform:translateY(16px);opacity:0} to{transform:translateY(0);opacity:1} }
+        .btn-show { background: linear-gradient(135deg, #db2777, #9d174d); color: white; box-shadow: 0 4px 12px rgba(219,39,119,0.3); }
+        .btn-show:hover { box-shadow: 0 6px 18px rgba(219,39,119,0.5); }
+        .hbd-badge { font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 20px; background: linear-gradient(90deg, #ff5c39, #ffcc00); color: #1a1000; }
+
+        .badge-hearts { position: absolute; top: 10px; right: 10px; z-index: 2; background: rgba(225,29,72,.9); color: #fff; font-size: 11px; font-weight: 800; padding: 3px 9px; border-radius: 20px; }
+        .lc-top { display: flex; flex-direction: column; gap: 4px; background: rgba(0,0,0,0.22); border-radius: 12px; padding: 8px; }
+        .lc-top-empty { font-size: 12px; color: var(--muted); padding: 6px; }
+        .lc-top-row { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 4px 6px; }
+        .lc-top-row img { width: 34px; height: 34px; border-radius: 8px; object-fit: cover; }
+        .lc-top-rank { width: 24px; text-align: center; font-weight: 700; color: var(--muted); }
+        .lc-top-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .lc-top-row b { color: #fb7185; white-space: nowrap; }
+        .lc-btn.danger { background: rgba(244,63,94,.18); border-color: var(--red); color: var(--red); }
+        .live-ctrl { margin-bottom: 24px; border-radius: var(--r2); border: 1px solid rgba(219,39,119,0.35); background:
+                     radial-gradient(600px 120px at 0% 0%, rgba(219,39,119,0.12), transparent 70%), var(--bg2); overflow: hidden; }
+        .lc-head { width: 100%; display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: none; border: none; color: var(--text); cursor: pointer; font-family: inherit; }
+        .lc-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; }
+        .lc-hint { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+        .lc-chev { margin-left: auto; color: var(--muted); transition: transform .2s; }
+        .live-ctrl.open .lc-chev { transform: rotate(180deg); }
+        .lc-body { padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 16px; }
+        .lc-section { display: flex; flex-direction: column; gap: 8px; }
+        .lc-label { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .8px; text-transform: uppercase; }
+        .lc-row { display: flex; gap: 8px; align-items: center; }
+        .lc-row.wrap { flex-wrap: wrap; }
+        .lc-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 800px) { .lc-grid2 { grid-template-columns: 1fr; } .lc-row:not(.wrap) { flex-wrap: wrap; } }
+        .lc-input { flex: 1 1 auto; width: auto; min-width: 200px; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 14px; outline: none; }
+        .lc-input:focus { border-color: rgba(219,39,119,0.6); }
+        .lc-select { flex: 0 0 auto; width: auto; background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px; padding: 10px; color: var(--text); font-family: inherit; font-size: 13px; outline: none; }
+        .lc-btn { height: 40px; padding: 0 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; white-space: nowrap; }
+        .lc-btn:hover { background: var(--surface2); border-color: var(--border2); transform: translateY(-1px); }
+        .lc-btn:active { transform: scale(.96); }
+        .lc-btn.primary { background: linear-gradient(135deg, #db2777, #9d174d); border-color: transparent; color: #fff; box-shadow: 0 4px 14px rgba(219,39,119,0.35); }
+        .lc-btn.fx:hover { border-color: rgba(219,39,119,0.5); box-shadow: 0 0 14px rgba(219,39,119,0.25); }
+        .lc-chip { padding: 7px 12px; border-radius: 20px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; }
+        .lc-chip:hover { color: var(--text); border-color: var(--border2); }
+        .lc-chip.on { background: rgba(219,39,119,0.18); border-color: #db2777; color: #fff; }
+        .lc-ticker { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); background: rgba(0,0,0,0.25); border-radius: 10px; padding: 8px 12px; }
+        .lc-ticker b { color: var(--text); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 60%; }
+        .lc-dot { width: 7px; height: 7px; border-radius: 50%; background: #db2777; box-shadow: 0 0 8px #db2777; animation: pulse-dot 1.2s infinite; flex-shrink: 0; }
+        .lc-x { margin-left: auto; background: none; border: none; color: var(--red); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600; }
+
         @keyframes pulse-urgent { 0%,100%{box-shadow:0 4px 12px rgba(16,213,138,0.25)} 50%{box-shadow:0 0 24px rgba(16,213,138,0.8), 0 0 8px rgba(255,255,255,0.3)} }
       `}</style>
 
@@ -526,6 +759,9 @@ export default function SuperAdmin() {
               <button className="icon-btn" title="รีเฟรช" onClick={fetchData}>
                 <RefreshCw size={16} />
               </button>
+              <button className="icon-btn" title="ออกจากระบบ" onClick={logout}>
+                <LogOut size={16} />
+              </button>
             </div>
           </header>
 
@@ -548,6 +784,13 @@ export default function SuperAdmin() {
               <div><div className="stat-val red">{counts.rejected}</div><div className="stat-label">ถังขยะ</div></div>
             </div>
           </div>
+
+          {/* Live control */}
+          <LiveControl showToast={showToast} hearts={{
+            top: data.filter(i => i.status === 'approved' && (i.hearts || 0) > 0)
+              .sort((a, b) => b.hearts - a.hearts).slice(0, 5)
+              .map(i => ({ ...i, count: i.hearts })),
+          }} />
 
           {/* Tabs */}
           <div className="tabs-row">
@@ -581,8 +824,10 @@ export default function SuperAdmin() {
               <Card
                 key={item.id}
                 item={item}
+                hearts={item.hearts || 0}
                 onAction={handleAction}
                 onPush={pushNext}
+                onShowNow={showNow}
                 onDeletePermanent={(id) => setConfirmId(id)}
                 onPreview={setPreviewUrl}
                 onSaveMessage={saveMessage}

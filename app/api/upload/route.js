@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabaseAdmin';
 import sharp from 'sharp';
+import { maskProfanity } from '@/lib/profanity';
 
 export async function POST(request) {
   try {
@@ -38,10 +39,10 @@ export async function POST(request) {
       .getPublicUrl(fileName);
 
     const newSubmission = {
-      name: formData.get('name') || '',
+      name: maskProfanity(String(formData.get('name') || '')).slice(0, 60),
       socialType: formData.get('socialType') || '',
-      tableNumber: formData.get('tableNumber') || '',
-      message: formData.get('message') || '',
+      tableNumber: String(formData.get('tableNumber') || '').slice(0, 20),
+      message: maskProfanity(String(formData.get('message') || '')).slice(0, 200),
       imageUrl: urlData.publicUrl,
       status: 'pending',
     };

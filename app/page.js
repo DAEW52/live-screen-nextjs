@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from 'react';
 import imageCompression from 'browser-image-compression';
+import { HBD_TAG } from '@/lib/liveFx';
+import MiniScreen from './components/MiniScreen';
 
 // ─── Social Icon SVG ─────────────────────────────────────────────
 const SocialIcon = ({ type, size = 28 }) => {
@@ -60,6 +62,8 @@ export default function HomePage() {
   const [statusMsg, setStatusMsg] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [isBirthday, setIsBirthday] = useState(false);
+
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -100,14 +104,14 @@ export default function HomePage() {
       formData.append('socialType', socialType);
       formData.append('name', username);
       formData.append('tableNumber', tableNumber);
-      formData.append('message', caption);
+      formData.append('message', isBirthday ? `${HBD_TAG} ${caption}` : caption);
 
       const res = await fetch('/api/upload', { method: 'POST', body: formData });
       if (!res.ok) throw new Error('การอัปโหลดล้มเหลว');
 
       setStatus('success');
       setStatusMsg('ส่งสำเร็จแล้ว! รอการอนุมัติสักครู่');
-      setUsername(''); setTableNumber(''); setCaption('');
+      setUsername(''); setTableNumber(''); setCaption(''); setIsBirthday(false);
       setSelectedFile(null); setPreviewUrl(null);
     } catch (err) {
       setStatus('error');
@@ -208,8 +212,18 @@ export default function HomePage() {
         .tips-list { display: flex; flex-direction: column; gap: 7px; }
         .tips-item { font-size: 12px; color: var(--muted); display: flex; gap: 8px; line-height: 1.5; }
         .tips-dot { color: rgba(59,130,246,0.6); flex-shrink: 0; margin-top: 1px; }
+        .hbd-chip { margin-top: 10px; width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-radius: 12px; cursor: pointer;
+                    background: rgba(255,255,255,0.03); border: 1px solid var(--border); color: var(--text); font-family: inherit; font-size: 14px; font-weight: 600; transition: all .2s; text-align: left; }
+        .hbd-chip small { color: var(--muted); font-weight: 400; font-size: 12px; margin-left: auto; white-space: nowrap; }
+        .hbd-chip.on { border-color: #ffcc00; background: linear-gradient(90deg, rgba(255,92,57,.15), rgba(255,204,0,.15)); box-shadow: 0 0 18px rgba(255,204,0,.25); }
+        .hbd-box { width: 20px; height: 20px; border-radius: 6px; border: 1.5px solid var(--border2); display: flex; align-items: center; justify-content: center; font-size: 13px; color: #111; flex-shrink: 0; }
+        .hbd-chip.on .hbd-box { background: #ffcc00; border-color: #ffcc00; }
+
         main::before { content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0; background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,0,0,0.04) 2px, rgba(0,0,0,0.04) 4px); }
       `}</style>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '18px', width: '100%', maxWidth: '520px', alignItems: 'center' }}>
+      <MiniScreen />
 
       <div className="upload-card" style={{ position: 'relative', zIndex: 1 }}>
         <div className="card-header">
@@ -248,7 +262,11 @@ export default function HomePage() {
 
           <div>
             <span className="field-label">แคปชั่น</span>
-            <textarea className="input-field" placeholder="บอกอะไรกับทุกคนหน่อย..." value={caption} onChange={e => setCaption(e.target.value)} />
+            <textarea className="input-field" placeholder="บอกอะไรกับทุกคนหน่อย..." value={caption} maxLength={150} onChange={e => setCaption(e.target.value)} />
+            <button type="button" className={`hbd-chip ${isBirthday ? 'on' : ''}`} onClick={() => setIsBirthday(v => !v)}>
+              <span className="hbd-box">{isBirthday ? '✓' : ''}</span>
+              🎂 อวยพรวันเกิด <small>🎈 ลูกโป่งขึ้นจอ</small>
+            </button>
           </div>
 
           <div>
@@ -296,6 +314,8 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+      </div>
+
       </div>
     </main>
   );
